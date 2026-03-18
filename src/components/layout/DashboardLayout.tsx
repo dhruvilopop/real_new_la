@@ -12,7 +12,8 @@ import {
   Home, FileText, CheckCircle, Clock, Users, Wallet, Shield, Building2, BarChart3,
   Settings, LogOut, Menu, Search, Edit, Calculator, MapPin, AlertTriangle, PieChart,
   CreditCard, Banknote, User, ClipboardCheck, Calendar, Receipt, TrendingUp,
-  Target, FileCheck, Activity, Briefcase, BookOpen, IndianRupee, Landmark, Percent
+  Target, FileCheck, Activity, Briefcase, BookOpen, IndianRupee, Landmark, Percent,
+  FileSpreadsheet
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Input } from '@/components/ui/input';

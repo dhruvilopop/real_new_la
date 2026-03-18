@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { cache, CACHE_KEYS } from '@/lib/cache';
+import { cache, CacheKeys } from '@/lib/cache';
 
 export async function GET() {
   try {
     // Use cache for settings (cache for 60 seconds)
     const settings = await cache.getOrSet(
-      CACHE_KEYS.SETTINGS,
+      CacheKeys.systemSettings(),
       async () => {
         const result = await db.systemSetting.findMany({
           select: { key: true, value: true }
@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
     await db.$transaction(updates);
 
     // Clear cache after update
-    cache.delete(CACHE_KEYS.SETTINGS);
+    cache.delete(CacheKeys.systemSettings());
 
     return NextResponse.json({ success: true, message: 'Settings saved successfully' });
   } catch (error) {

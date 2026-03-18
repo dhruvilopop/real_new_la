@@ -15,11 +15,18 @@ Work Log:
 - Verified payment settings API exists at `/src/app/api/settings/payment/route.ts`
 - Settings dialog UI in PaymentRequestsSection already complete
 - Reduced polling intervals across all credit-related components:
-  - DashboardLayout: 30s -> 2min interval
-  - CreditManagementSection: 5s -> 2min interval
-  - MyCreditPassbook: 1s -> 30s auto-refresh interval
-  - CreditManagementPage: 1s -> 30s auto-refresh interval
+  - DashboardLayout: removed interval polling completely
+  - CreditManagementSection: 5s -> removed interval
+  - MyCreditPassbook: autoRefresh disabled by default
+  - CreditManagementPage: autoRefresh disabled by default
 - Increased credit API cache TTL from 30s to 60s
+- Disabled NotificationBell 30s polling
+- Disabled AccountantDashboard real-time updates (isRealTimeEnabled = false)
+- Disabled SecurityContext real-time updates (isRealTimeEnabled = false)
+- Fixed customer portal sanction acceptance:
+  - Added sessionForm to loan list API response for customer role
+  - Customer can now see sanction details (approved amount, EMI, tenure)
+  - Review & Accept button properly shows for SESSION_CREATED status loans
 
 Stage Summary:
 - Fixed duplicate cards in: SuperAdminDashboard, AgentDashboard, StaffDashboard, CompanyDashboard, CashierDashboard
@@ -27,9 +34,10 @@ Stage Summary:
 - Caching utility created with TTL support and key generators for common queries
 - Payment settings API with caching already implemented
 - Significantly reduced database query frequency to prevent connection limit issues
+- Customer portal now properly shows sanction acceptance button and dialog
 - All changes committed and pushed to git
 
 Note: Database connection limit (500/hour) was exceeded initially. 
-The caching solution and reduced polling intervals will prevent this issue in the future.
+The caching solution and removed polling intervals will prevent this issue in the future.
 
 ---
