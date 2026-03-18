@@ -79,8 +79,12 @@ interface BankAccount {
   bankName: string;
   accountNumber: string;
   accountName: string;
+  ifscCode?: string;
+  branchName?: string;
   currentBalance: number;
   isDefault: boolean;
+  upiId?: string;
+  qrCodeUrl?: string;
   transactions?: BankTransaction[];
   totalCredits?: number;
   totalDebits?: number;
@@ -237,7 +241,7 @@ export default function AccountantDashboard() {
   });
   
   const [newBankData, setNewBankData] = useState({
-    bankName: '', accountNumber: '', accountName: '', ifscCode: '', accountType: 'CURRENT', openingBalance: 0,
+    bankName: '', accountNumber: '', accountName: '', ifscCode: '', branchName: '', accountType: 'CURRENT', openingBalance: 0,
     upiId: '', qrCodeUrl: '', isDefault: false
   });
 
@@ -549,7 +553,7 @@ export default function AccountantDashboard() {
   };
 
   const resetBankForm = () => {
-    setNewBankData({ bankName: '', accountNumber: '', accountName: '', ifscCode: '', accountType: 'CURRENT', openingBalance: 0, upiId: '', qrCodeUrl: '', isDefault: false });
+    setNewBankData({ bankName: '', accountNumber: '', accountName: '', ifscCode: '', branchName: '', accountType: 'CURRENT', openingBalance: 0, upiId: '', qrCodeUrl: '', isDefault: false });
   };
 
   const confirmDelete = (type: string, id: string, name: string) => {
@@ -2429,6 +2433,10 @@ export default function AccountantDashboard() {
                 <Input value={newBankData.ifscCode} onChange={(e) => setNewBankData({ ...newBankData, ifscCode: e.target.value })} />
               </div>
             </div>
+            <div>
+              <Label>Branch Name</Label>
+              <Input placeholder="e.g., Main Branch" value={newBankData.branchName} onChange={(e) => setNewBankData({ ...newBankData, branchName: e.target.value })} />
+            </div>
             <div className="border-t pt-4 mt-2">
               <h4 className="font-medium mb-3 flex items-center gap-2">
                 <CreditCard className="h-4 w-4" /> Payment Settings (for Customer Payment Page)
@@ -2593,19 +2601,56 @@ export default function AccountantDashboard() {
                   <h3 className="text-xl font-bold">{selectedBankAccount.bankName}</h3>
                   <p className="text-muted-foreground">{selectedBankAccount.accountName}</p>
                 </div>
-                {selectedBankAccount.isDefault && <Badge>Default</Badge>}
+                {selectedBankAccount.isDefault && <Badge className="bg-green-500">Default Account</Badge>}
               </div>
               <div className="p-4 bg-muted rounded-lg space-y-3">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Account Number:</span>
                   <span className="font-mono">{selectedBankAccount.accountNumber}</span>
                 </div>
+                {selectedBankAccount.ifscCode && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">IFSC Code:</span>
+                    <span className="font-mono">{selectedBankAccount.ifscCode}</span>
+                  </div>
+                )}
+                {selectedBankAccount.branchName && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Branch:</span>
+                    <span>{selectedBankAccount.branchName}</span>
+                  </div>
+                )}
                 <Separator />
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Current Balance:</span>
                   <span className="text-2xl font-bold text-green-600">{formatCurrency(selectedBankAccount.currentBalance)}</span>
                 </div>
               </div>
+              
+              {/* Payment Settings Section */}
+              {(selectedBankAccount.upiId || selectedBankAccount.qrCodeUrl) && (
+                <div className="border-t pt-4">
+                  <h4 className="font-medium mb-3 flex items-center gap-2">
+                    <CreditCard className="h-4 w-4" /> Payment Settings (for Customer)
+                  </h4>
+                  <div className="space-y-3">
+                    {selectedBankAccount.upiId && (
+                      <div className="flex justify-between items-center p-3 bg-white rounded-lg border">
+                        <span className="text-muted-foreground">UPI ID:</span>
+                        <span className="font-mono font-medium">{selectedBankAccount.upiId}</span>
+                      </div>
+                    )}
+                    {selectedBankAccount.qrCodeUrl && (
+                      <div className="p-3 bg-white rounded-lg border">
+                        <span className="text-muted-foreground text-sm">QR Code:</span>
+                        <div className="mt-2">
+                          <img src={selectedBankAccount.qrCodeUrl} alt="QR Code" className="w-32 h-32 rounded-lg" />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
           <DialogFooter>

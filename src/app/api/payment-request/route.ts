@@ -15,7 +15,18 @@ export async function GET(request: NextRequest) {
     // Get payment request settings
     if (action === 'settings') {
       const loanApplicationId = searchParams.get('loanApplicationId');
-      const companyId = searchParams.get('companyId');
+      let companyId = searchParams.get('companyId');
+      
+      // If companyId not provided, get it from the loan application
+      if (loanApplicationId && !companyId) {
+        const loan = await db.loanApplication.findUnique({
+          where: { id: loanApplicationId },
+          select: { companyId: true }
+        });
+        companyId = loan?.companyId || null;
+      }
+      
+      let settings: any = null;
       
       // First check loan-specific settings
       if (loanApplicationId) {
@@ -23,43 +34,86 @@ export async function GET(request: NextRequest) {
           where: { loanApplicationId, scope: 'LOAN' }
         });
         if (loanSettings) {
-          return NextResponse.json({ success: true, settings: loanSettings });
+          settings = loanSettings;
         }
       }
       
       // Then check company-specific settings
-      if (companyId) {
+      if (!settings && companyId) {
         const companySettings = await db.companyPaymentSettings.findUnique({
           where: { companyId }
         });
         if (companySettings) {
-          return NextResponse.json({ success: true, settings: companySettings });
+          settings = companySettings;
         }
       }
       
-      // Return global default settings
-      const globalSettings = await db.paymentOptionSettings.findFirst({
-        where: { scope: 'GLOBAL' }
-      });
-      
-      if (!globalSettings) {
-        // Create default settings
-        const defaultSettings = await db.paymentOptionSettings.create({
-          data: {
-            scope: 'GLOBAL',
-            enableFullPayment: true,
-            enablePartialPayment: true,
-            enableInterestOnly: true,
-            maxPartialPayments: 2,
-            maxInterestOnlyPerLoan: 3,
-            acceptedPaymentMethods: 'UPI,BANK_TRANSFER,CASH',
-            createdById: userId || 'system'
-          }
+      // Return global default settings if no specific settings found
+      if (!settings) {
+        const globalSettings = await db.paymentOptionSettings.findFirst({
+          where: { scope: 'GLOBAL' }
         });
-        return NextResponse.json({ success: true, settings: defaultSettings });
+        
+        if (globalSettings) {
+          settings = globalSettings;
+        } else {
+          // Create default settings
+          settings = await db.paymentOptionSettings.create({
+            data: {
+              scope: 'GLOBAL',
+              enableFullPayment: true,
+              enablePartialPayment: true,
+              enableInterestOnly: true,
+              maxPartialPayments: 2,
+              maxInterestOnlyPerLoan: 3,
+              acceptedPaymentMethods: 'UPI,BANK_TRANSFER,CASH',
+              createdById: userId || 'system'
+            }
+          });
+        }
       }
       
-      return NextResponse.json({ success: true, settings: globalSettings });
+      // Fetch company's default bank account details for payment
+      let bankAccountDetails = null;
+      if (companyId) {
+        const defaultBankAccount = await db.bankAccount.findFirst({
+          where: { 
+            companyId,
+            isDefault: true 
+          },
+          select: {
+            id: true,
+            bankName: true,
+            accountNumber: true,
+            accountName: true,
+            ifscCode: true,
+            branchName: true,
+            upiId: true,
+            qrCodeUrl: true
+          }
+        });
+        
+        if (defaultBankAccount) {
+          bankAccountDetails = {
+            bankAccountId: defaultBankAccount.id,
+            bankName: defaultBankAccount.bankName,
+            bankAccountNumber: defaultBankAccount.accountNumber,
+            bankAccountName: defaultBankAccount.accountName,
+            bankIfscCode: defaultBankAccount.ifscCode,
+            bankBranch: defaultBankAccount.branchName,
+            companyUpiId: defaultBankAccount.upiId,
+            companyQrCodeUrl: defaultBankAccount.qrCodeUrl
+          };
+        }
+      }
+      
+      return NextResponse.json({ 
+        success: true, 
+        settings: {
+          ...settings,
+          ...bankAccountDetails
+        }
+      });
     }
 
     // Get EMI details for payment
