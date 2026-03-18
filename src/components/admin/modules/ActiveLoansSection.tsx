@@ -12,7 +12,7 @@ import { Switch } from '@/components/ui/switch';
 import { 
   Wallet, DollarSign, FileText, Receipt, RefreshCw, Trash2, Eye, 
   Calendar, IndianRupee, Clock, AlertTriangle, ChevronDown, ChevronUp, Edit,
-  Settings, ToggleLeft, ToggleRight
+  Settings, ToggleLeft, ToggleRight, Info
 } from 'lucide-react';
 import { formatCurrency, formatDate } from '@/utils/helpers';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -104,6 +104,12 @@ export function ActiveLoansSection({
     allowInterestOnly: boolean;
     autoAdjustDates: boolean;
   }}>({});
+  
+  // EMI Payment Settings Dialog
+  const [showEmiSettingsDialog, setShowEmiSettingsDialog] = useState(false);
+  const [emiPaymentSettings, setEmiPaymentSettings] = useState<any>(null);
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [secondaryPaymentPages, setSecondaryPaymentPages] = useState<any[]>([]);
 
   // Accountant cannot manage EMIs
   const canManageEmi = userRole !== 'ACCOUNTANT';
@@ -132,6 +138,67 @@ export function ActiveLoansSection({
     } catch (error) {
       toast({ title: 'Error', description: 'Failed to update setting', variant: 'destructive' });
     }
+  };
+
+  // Fetch EMI Payment Settings
+  const fetchEmiPaymentSettings = async (emiId: string, companyId?: string) => {
+    try {
+      const response = await fetch(`/api/emi-payment-settings?emiScheduleId=${emiId}`);
+      const data = await response.json();
+      if (data.success) {
+        setEmiPaymentSettings(data.settings);
+        
+        // Fetch secondary payment pages for this company
+        if (companyId) {
+          const pagesResponse = await fetch(`/api/emi-payment-settings?action=secondary-pages&companyId=${companyId}`);
+          const pagesData = await pagesResponse.json();
+          if (pagesData.success) {
+            setSecondaryPaymentPages(pagesData.pages);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching EMI payment settings:', error);
+    }
+  };
+
+  // Save EMI Payment Settings
+  const saveEmiPaymentSettings = async () => {
+    if (!selectedEmi || !selectedLoan) return;
+    setSavingSettings(true);
+    try {
+      const response = await fetch('/api/emi-payment-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          emiScheduleId: selectedEmi.id,
+          loanApplicationId: selectedLoan.id,
+          ...emiPaymentSettings,
+          modifiedById: userId
+        })
+      });
+      
+      const data = await response.json();
+      if (data.success) {
+        toast({ title: 'Settings Saved', description: 'EMI payment settings have been updated' });
+        setShowEmiSettingsDialog(false);
+        onRefresh?.();
+      } else {
+        toast({ title: 'Error', description: data.error || 'Failed to save settings', variant: 'destructive' });
+      }
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to save settings', variant: 'destructive' });
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  // Open EMI Settings Dialog
+  const handleOpenEmiSettings = async (loan: ActiveLoan, emi: any) => {
+    setSelectedLoan(loan);
+    setSelectedEmi(emi);
+    await fetchEmiPaymentSettings(emi.id, loan.company?.id);
+    setShowEmiSettingsDialog(true);
   };
 
   const filteredLoans = loans.filter(loan => {
@@ -615,6 +682,15 @@ export function ActiveLoansSection({
                                             >
                                               <Edit className="h-3 w-3" />
                                             </Button>
+                                            <Button 
+                                              size="sm" 
+                                              variant="ghost"
+                                              className="h-7 w-7 p-0"
+                                              onClick={() => handleOpenEmiSettings(loan, emi)}
+                                              title="Payment Settings"
+                                            >
+                                              <Settings className="h-3 w-3" />
+                                            </Button>
                                           </div>
                                         )}
                                       </div>
@@ -871,6 +947,137 @@ export function ActiveLoansSection({
               disabled={processing || !newEmiDate}
             >
               {processing ? 'Updating...' : 'Update Date'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* EMI Payment Settings Dialog */}
+      <Dialog open={showEmiSettingsDialog} onOpenChange={setShowEmiSettingsDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Settings className="h-5 w-5 text-gray-500" />
+              EMI Payment Settings
+            </DialogTitle>
+            <DialogDescription>
+              Configure payment options for EMI #{selectedEmi?.installmentNumber}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-6 py-4">
+            {/* Payment Options Toggles */}
+            <div className="space-y-4">
+              <h4 className="font-medium text-sm">Payment Options</h4>
+              
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label>Full Payment</Label>
+                  <p className="text-xs text-gray-500">Allow customer to pay full EMI</p>
+                </div>
+                <Switch
+                  checked={emiPaymentSettings?.enableFullPayment ?? true}
+                  onCheckedChange={(checked) => 
+                    setEmiPaymentSettings((prev: any) => ({ ...prev, enableFullPayment: checked }))
+                  }
+                />
+              </div>
+              
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label>Partial Payment</Label>
+                  <p className="text-xs text-gray-500">Allow customer to pay in parts</p>
+                </div>
+                <Switch
+                  checked={emiPaymentSettings?.enablePartialPayment ?? true}
+                  onCheckedChange={(checked) => 
+                    setEmiPaymentSettings((prev: any) => ({ ...prev, enablePartialPayment: checked }))
+                  }
+                />
+              </div>
+              
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label>Interest Only</Label>
+                  <p className="text-xs text-gray-500">Allow paying only interest amount</p>
+                </div>
+                <Switch
+                  checked={emiPaymentSettings?.enableInterestOnly ?? true}
+                  onCheckedChange={(checked) => 
+                    setEmiPaymentSettings((prev: any) => ({ ...prev, enableInterestOnly: checked }))
+                  }
+                />
+              </div>
+            </div>
+            
+            {/* Payment Page Selection */}
+            <div className="space-y-4">
+              <h4 className="font-medium text-sm">Payment Page</h4>
+              
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label>Use Default Company Page</Label>
+                  <p className="text-xs text-gray-500">Show company's default bank account</p>
+                </div>
+                <Switch
+                  checked={emiPaymentSettings?.useDefaultCompanyPage ?? true}
+                  onCheckedChange={(checked) => 
+                    setEmiPaymentSettings((prev: any) => ({ ...prev, useDefaultCompanyPage: checked }))
+                  }
+                />
+              </div>
+              
+              {!emiPaymentSettings?.useDefaultCompanyPage && (
+                <div className="space-y-2">
+                  <Label>Select Payment Page</Label>
+                  <Select
+                    value={emiPaymentSettings?.secondaryPaymentPageId || ''}
+                    onValueChange={(value) => 
+                      setEmiPaymentSettings((prev: any) => ({ ...prev, secondaryPaymentPageId: value }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select payment page" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {secondaryPaymentPages.map((page) => (
+                        <SelectItem key={page.id} value={page.id}>
+                          {page.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {secondaryPaymentPages.length === 0 && (
+                    <p className="text-xs text-amber-600">
+                      No secondary payment pages available. Create one from Cashier portal.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+            
+            {/* Info Box */}
+            <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+              <div className="flex items-start gap-2">
+                <Info className="h-4 w-4 text-blue-500 mt-0.5" />
+                <div className="text-sm text-blue-700">
+                  <p className="font-medium">Important:</p>
+                  <p>All transactions are recorded in the company's default bank account regardless of which payment page is displayed.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEmiSettingsDialog(false)}>
+              Cancel
+            </Button>
+            <Button 
+              className="bg-emerald-500 hover:bg-emerald-600"
+              onClick={saveEmiPaymentSettings}
+              disabled={savingSettings}
+            >
+              {savingSettings ? 'Saving...' : 'Save Settings'}
             </Button>
           </DialogFooter>
         </DialogContent>

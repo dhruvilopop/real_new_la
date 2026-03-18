@@ -115,6 +115,10 @@ model User {
   // Payment Request relations
   paymentRequests        PaymentRequest[]
   reviewedPaymentRequests PaymentRequest[]  @relation("PaymentRequestReviewer")
+  // Secondary Payment Pages (created by this user)
+  createdSecondaryPaymentPages SecondaryPaymentPage[]
+  // EMI Payment Settings modifications
+  modifiedEMIPaymentSettings EMIPaymentSetting[]
   @@index([email])
   @@index([phone])
   @@index([role])
@@ -165,6 +169,8 @@ model Company {
   fixedAssets         FixedAsset[]
   // Payment Settings
   paymentSettings     CompanyPaymentSettings?
+  // Secondary Payment Pages (for display only)
+  secondaryPaymentPages SecondaryPaymentPage[]
   @@index([code])
 }
 
@@ -326,6 +332,8 @@ model LoanApplication {
   applicationFingerprints ApplicationFingerprint[]
   // Payment Request relations
   paymentRequests        PaymentRequest[]
+  // EMI Payment Settings
+  emiPaymentSettings    EMIPaymentSetting[]
   @@index([applicationNo])
   @@index([customerId])
   @@index([status])
@@ -449,6 +457,7 @@ model EMISchedule {
   loanApplication      LoanApplication  @relation(fields: [loanApplicationId], references: [id])
   payments             Payment[]
   paymentRequests      PaymentRequest[]
+  paymentSetting       EMIPaymentSetting?
   @@unique([loanApplicationId, installmentNumber])
   @@index([loanApplicationId])
   @@index([dueDate])
@@ -968,6 +977,11 @@ model BankAccount {
   currentBalance  Float    @default(0)
   isActive        Boolean  @default(true)
   isDefault       Boolean  @default(false)
+  
+  // Payment Display Settings (for customer payment page)
+  upiId            String?   // UPI ID for receiving payments
+  qrCodeUrl        String?   // QR Code image URL
+  
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   company         Company? @relation(fields: [companyId], references: [id])
@@ -2090,4 +2104,65 @@ model CompanyPaymentSettings {
   updatedAt             DateTime            @updatedAt
   
   company               Company?            @relation(fields: [companyId], references: [id])
+}
+
+// Secondary Payment Pages (Display Only - Created by Cashier)
+// These are for showing different payment details to customers
+// BUT actual transactions happen in Company's Default Bank Account
+model SecondaryPaymentPage {
+  id                    String   @id @default(cuid())
+  companyId             String   // Which company this payment page belongs to
+  name                  String   // Name for this payment page (e.g., "Partner Collection Point 1")
+  description           String? // Description
+  
+  // Payment Display Details (what customer sees)
+  upiId                 String?   // UPI ID shown to customer
+  qrCodeUrl             String?   // QR Code image shown to customer
+  bankName              String?   // Bank name shown to customer
+  accountNumber         String?   // Account number shown to customer
+  accountName           String?   // Account holder name shown to customer
+  ifscCode              String?   // IFSC code shown to customer
+  
+  isActive              Boolean  @default(true)
+  createdById           String   // Who created this payment page (usually Cashier)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  
+  company               Company? @relation(fields: [companyId], references: [id])
+  creator               User?    @relation(fields: [createdById], references: [id])
+  emiPaymentSettings    EMIPaymentSetting[]
+  
+  @@index([companyId])
+  @@index([isActive])
+}
+
+// EMI Payment Settings - Per EMI toggle options
+model EMIPaymentSetting {
+  id                      String   @id @default(cuid())
+  emiScheduleId            String   @unique
+  loanApplicationId       String
+  
+  // Payment Options Toggle
+  enableFullPayment       Boolean  @default(true)
+  enablePartialPayment    Boolean  @default(true)
+  enableInterestOnly      Boolean  @default(true)
+  
+  // Payment Page Selection (which payment details to show to customer)
+  useDefaultCompanyPage   Boolean  @default(true)  // true = use company's default bank account
+  secondaryPaymentPageId  String?   // If useDefaultCompanyPage is false, use this secondary page
+  
+  // Tracking
+  lastModifiedById        String?   // Who last modified these settings
+  lastModifiedAt          DateTime? @updatedAt
+  
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+  
+  emiSchedule             EMISchedule?        @relation(fields: [emiScheduleId], references: [id])
+  loanApplication         LoanApplication?   @relation(fields: [loanApplicationId], references: [id])
+  secondaryPaymentPage    SecondaryPaymentPage? @relation(fields: [secondaryPaymentPageId], references: [id])
+  modifiedBy              User?               @relation(fields: [lastModifiedById], references: [id])
+  
+  @@index([emiScheduleId])
+  @@index([loanApplicationId])
 }
