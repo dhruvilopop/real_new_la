@@ -57,8 +57,8 @@ interface EMISettingsDialogProps {
     paymentStatus: string;
     paidAmount?: number;
     partialPaymentCount?: number;
-    loanApplicationId: string;
-  };
+    loanApplicationId?: string;
+  } | null;
   loanId: string;
   companyId?: string;
   onSettingsSaved?: () => void;
@@ -206,7 +206,7 @@ export default function EMISettingsDialog({
               </div>
               <div className="text-right">
                 <p className="text-sm text-gray-500">Due Date</p>
-                <p className="font-medium">{formatDate(emi?.dueDate)}</p>
+                <p className="font-medium">{emi?.dueDate ? formatDate(emi.dueDate) : 'N/A'}</p>
               </div>
             </div>
 

@@ -46,7 +46,7 @@ interface ActiveLoan {
   tenure: number;
   emiAmount: number;
   customer?: { name: string; phone?: string; email?: string; id?: string };
-  company?: { name: string };
+  company?: { name: string; id?: string };
   nextEmi?: { id?: string; dueDate: string; amount: number; status: string; installmentNumber?: number };
   disbursementDate?: string;
   createdAt: string;

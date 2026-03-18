@@ -41,3 +41,33 @@ Note: Database connection limit (500/hour) was exceeded initially.
 The caching solution and removed polling intervals will prevent this issue in the future.
 
 ---
+Task ID: 2
+Agent: Main Agent
+Task: Implement Payment Page System with Per-EMI Payment Options
+
+Work Log:
+- Reviewed Prisma schema - EMIPaymentSetting and SecondaryPaymentPage models already exist
+- Updated /api/bank-account/route.ts with UPI ID, QR Code URL, isDefault fields
+- Updated /api/accounting/bank-accounts/route.ts with UPI ID and QR Code URL fields
+- Created EMISettingsDialog component for per-EMI payment options
+- Added Settings icon import to CustomerLoanDetailPage
+- Added Settings button to each EMI item with clickable toggle
+- Added showSettingsDialog state for settings dialog
+- Integrated EMISettingsDialog with loan details and company ID
+- Updated AccountantDashboard bank dialog with:
+  - UPI ID input field
+  - QR Code URL input field
+  - "Set as Default Account" checkbox
+  - "Payment Settings for Customer Payment Page" section
+- Updated newBankData state to include upiId, qrCodeUrl, isDefault fields
+- Updated resetBankForm to reset new fields
+
+Stage Summary:
+- Per-EMI Payment Option Toggle implemented with visual UI
+- Company Bank Account management enhanced with UPI ID, QR Code, Default toggle
+- Default Payment Page = Company's default bank account
+- Secondary Payment Pages API exists for display-only payment details
+- All transactions tracked in default company bank account
+- All changes committed and pushed to git (commit 3a25c29)
+
+---

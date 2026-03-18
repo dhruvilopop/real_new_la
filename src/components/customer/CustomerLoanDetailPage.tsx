@@ -49,6 +49,7 @@ interface EMISchedule {
   partialPaymentCount?: number;
   remainingAmount?: number;
   partialPaymentNumber?: number;
+  loanApplicationId?: string;
 }
 
 interface PaymentSettings {
@@ -304,7 +305,7 @@ export default function CustomerLoanDetailPage() {
     setPaymentLoading(true);
     try {
       // Upload proof first if there's a file
-      let proofUrl = null;
+      let proofUrl: string | null = null;
       
       if (proofFile) {
         console.log('Proof file exists, uploading...');
