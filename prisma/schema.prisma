@@ -1,0 +1,1893 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model DeletedUser {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  firebaseUid  String?  @unique
+  originalRole String
+  deletedById  String?
+  deletedAt    DateTime @default(now())
+  reason       String?
+  @@index([email])
+  @@index([firebaseUid])
+}
+
+model User {
+  id                     String              @id @default(cuid())
+  firebaseUid            String              @unique
+  email                  String              @unique
+  phone                  String?
+  name                   String?
+  role                   UserRole            @default(CUSTOMER)
+  isActive               Boolean             @default(true)
+  isLocked               Boolean             @default(false)
+  failedLoginAttempts    Int                 @default(0)
+  lastLoginAt            DateTime?
+  profilePicture         String?
+  companyId              String?
+  agentId                String?
+  agentCode              String?             @unique
+  commissionRate         Float?              @default(0)
+  staffCode              String?             @unique
+  assignedBranch         String?
+  cashierCode            String?             @unique
+  accountantCode         String?             @unique
+  dailyLimit             Float?              @default(100000)
+  panNumber              String?
+  aadhaarNumber          String?
+  dateOfBirth            DateTime?
+  address                String?
+  city                   String?
+  state                  String?
+  pincode                String?
+  employmentType         String?
+  monthlyIncome          Float?
+  bankAccountNumber      String?
+  bankIfsc               String?
+  bankName               String?
+  termsAccepted          Boolean             @default(false)
+  termsAcceptedAt        DateTime?
+  termsAcceptedIp        String?
+  privacyAccepted        Boolean             @default(false)
+  privacyAcceptedAt      DateTime?
+  privacyAcceptedIp      String?
+  password               String?
+  verificationCode       String?
+  verificationCodeExpiry DateTime?
+  staffVerificationCode  String?
+  showPassword           Boolean             @default(false)
+  plainPassword          String?
+  loginType              String              @default("EMAIL")
+  lastActivityAt         DateTime?
+  lastLocation           String?
+  // Credit System Fields - Dual Credit System
+  companyCredit          Float               @default(0) // Company credit - only CASH payments increase this
+  personalCredit         Float               @default(0) // Personal credit - when money taken in personal account
+  // Legacy field for backward compatibility
+  credit                 Float               @default(0) // Total credit (companyCredit + personalCredit)
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+  deletedAt              DateTime?
+  auditLogs              AuditLog[]
+  blacklists             Blacklist[]
+  deviceFingerprints     DeviceFingerprint[]
+  disbursedLoans         LoanApplication[]   @relation("DisbursedBy")
+  rejectedLoans          LoanApplication[]   @relation("RejectedBy")
+  processedLoans         LoanApplication[]   @relation("ProcessedLoans")
+  loanApplications       LoanApplication[]   @relation("CustomerApplications")
+  locationLogs           LocationLog[]
+  notifications          Notification[]
+  cashierPayments        Payment[]           @relation("CashierPayments")
+  payments               Payment[]           @relation("CustomerPayments")
+  reminders              Reminder[]
+  sessions               SessionForm[]
+  notificationSettings   NotificationSetting[]
+  agent                  User?               @relation("AgentStaff", fields: [agentId], references: [id])
+  staffMembers           User[]              @relation("AgentStaff")
+  company                Company?            @relation(fields: [companyId], references: [id])
+  workflowLogs           WorkflowLog[]
+  // Credit System Relations
+  creditTransactions     CreditTransaction[] @relation("UserCreditTransactions")
+  creditSettlements      CashierSettlement[] @relation("UserSettlements")
+  receivedSettlements    CashierSettlement[] @relation("CashierReceivedSettlements")
+  // Advanced features relations
+  preApprovedOffers      PreApprovedOffer[]
+  creditRiskScores       CreditRiskScore[]
+  referrals              Referral[]
+  agentPerformance       AgentPerformance[]
+  // Offline Loan relations
+  createdOfflineLoans    OfflineLoan[]      @relation("OfflineLoanCreator")
+  offlineLoansAsCustomer OfflineLoan[]      @relation("OfflineLoanCustomer")
+  collectedEMIs          OfflineLoanEMI[]
+  emiReminders           EMIReminderLog[]
+  // Action Log relations
+  actionLogs             ActionLog[]
+  undoneActions          ActionLog[]        @relation("ActionUndoBy")
+  redoneActions          ActionLog[]        @relation("ActionRedoBy")
+  @@index([email])
+  @@index([phone])
+  @@index([role])
+  @@index([agentId])
+}
+
+model Company {
+  id                  String            @id @default(cuid())
+  name                String
+  code                String            @unique
+  registrationNo      String?
+  gstNumber           String?
+  address             String?
+  city                String?
+  state               String?
+  pincode             String?
+  contactEmail        String?
+  contactPhone        String?
+  isActive            Boolean           @default(true)
+  maxLoanAmount       Float             @default(10000000)
+  minLoanAmount       Float             @default(10000)
+  defaultInterestRate Float             @default(12)
+  maxTenureMonths     Int               @default(60)
+  // Company Credit - only CASH payments increase this
+  companyCredit       Float             @default(0)
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  deletedAt           DateTime?
+  // Relations
+  ledgers             Ledger[]
+  loanApplications    LoanApplication[]
+  users               User[]
+  // Accounting Relations
+  chartOfAccounts     ChartOfAccount[]
+  financialYears      FinancialYear[]
+  journalEntries      JournalEntry[]
+  expenses            Expense[]
+  bankAccounts        BankAccount[]
+  gstConfigs          GSTConfig[]
+  // Advanced features relations
+  preApprovedOffers   PreApprovedOffer[]
+  commissionSlabs     CommissionSlab[]
+  gracePeriodConfigs  GracePeriodConfig[]
+  agentPerformance    AgentPerformance[]
+  // Offline Loan relations
+  offlineLoans        OfflineLoan[]
+  // Fixed Assets relations
+  fixedAssets         FixedAsset[]
+  @@index([code])
+}
+
+model LoanApplication {
+  id                    String        @id @default(cuid())
+  applicationNo         String        @unique
+  customerId            String
+  companyId             String?
+  loanType              LoanType      @default(PERSONAL)
+  status                LoanStatus    @default(SUBMITTED)
+  requestedAmount       Float
+  requestedTenure       Int
+  requestedInterestRate Float?
+  purpose               String?
+  title                 String?
+  firstName             String?
+  middleName            String?
+  lastName              String?
+  fatherName            String?
+  motherName            String?
+  gender                String?
+  maritalStatus         String?
+  panNumber             String?
+  aadhaarNumber         String?
+  dateOfBirth           DateTime?
+  nationality           String?
+  address               String?
+  city                  String?
+  state                 String?
+  pincode               String?
+  phone                 String?
+  employmentType        String?
+  employerName          String?
+  employerAddress       String?
+  designation           String?
+  yearsInEmployment     Int?
+  totalWorkExperience   Int?
+  officePhone           String?
+  officeEmail           String?
+  monthlyIncome         Float?
+  annualIncome          Float?
+  otherIncome           Float?
+  incomeSource          String?
+  bankAccountNumber     String?
+  bankIfsc              String?
+  bankName              String?
+  bankBranch            String?
+  accountType           String?
+  accountHolderName     String?
+  loanAmount            Float?
+  tenure                Int?
+  interestRate          Float?
+  emiAmount             Float?
+  processingFee         Float?
+  panCardDoc            String?
+  aadhaarFrontDoc       String?
+  aadhaarBackDoc        String?
+  incomeProofDoc        String?
+  addressProofDoc       String?
+  photoDoc              String?
+  bankStatementDoc      String?
+  salarySlipDoc         String?
+  electionCardDoc       String?
+  housePhotoDoc         String?
+  otherDocs             String?
+  reference1Name        String?
+  reference1Phone       String?
+  reference1Relation    String?
+  reference1Address     String?
+  reference2Name        String?
+  reference2Phone       String?
+  reference2Relation    String?
+  reference2Address     String?
+  digitalSignature      String?
+  signatureHash         String?
+  consentGiven          Boolean       @default(false)
+  consentTimestamp      DateTime?
+  consentIp             String?
+  applicationLocation   String?
+  currentHandlerId      String?
+  currentStage          String?
+  riskScore             Int?          @default(0)
+  fraudFlag             Boolean       @default(false)
+  fraudReason           String?
+  rejectionReason       String?
+  rejectedById          String?
+  rejectedAt            DateTime?
+  disbursedAmount       Float?
+  disbursedAt           DateTime?
+  disbursedById         String?
+  disbursementMode      String?
+  disbursementRef       String?
+  disbursementProof     String?
+  submittedAt           DateTime      @default(now())
+  saApprovedAt          DateTime?
+  companyApprovedAt     DateTime?
+  agentApprovedAt       DateTime?
+  loanFormCompletedAt   DateTime?
+  sessionCreatedAt      DateTime?
+  customerApprovedAt    DateTime?
+  finalApprovedAt       DateTime?
+  closedAt              DateTime?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  deletedAt             DateTime?
+  auditLogs             AuditLog[]
+  emiSchedules          EMISchedule[]
+  disbursedBy           User?         @relation("DisbursedBy", fields: [disbursedById], references: [id])
+  rejectedBy            User?         @relation("RejectedBy", fields: [rejectedById], references: [id])
+  processedBy           User?         @relation("ProcessedLoans", fields: [currentHandlerId], references: [id])
+  company               Company?      @relation(fields: [companyId], references: [id])
+  customer              User          @relation("CustomerApplications", fields: [customerId], references: [id])
+  loanForm              LoanForm?
+  payments              Payment[]
+  sessionForm           SessionForm?
+  workflowLogs          WorkflowLog[]
+  // Advanced features relations
+  loanTopUps            LoanTopUp[]
+  foreclosureRequests   ForeclosureRequest[]
+  emiDateChangeRequests EMIDateChangeRequest[]
+  counterOffers         CounterOffer[]
+  documentRequests      DocumentRequest[]
+  loanRestructures      LoanRestructure[]
+  npaTrackings          NPATracking[]
+  fraudAlerts           FraudAlert[]
+  appointments          Appointment[]
+  loanAgreement         LoanAgreement?
+  progressTimelines     LoanProgressTimeline[]
+  applicationFingerprints ApplicationFingerprint[]
+  @@index([applicationNo])
+  @@index([customerId])
+  @@index([status])
+  @@index([companyId])
+}
+
+model LoanForm {
+  id                  String          @id @default(cuid())
+  loanApplicationId   String          @unique
+  panVerified         Boolean         @default(false)
+  aadhaarVerified     Boolean         @default(false)
+  bankVerified        Boolean         @default(false)
+  employmentVerified  Boolean         @default(false)
+  addressVerified     Boolean         @default(false)
+  incomeVerified      Boolean         @default(false)
+  verificationRemarks String?
+  verificationDate    DateTime?
+  verifiedById        String?
+  riskScore           Int             @default(0)
+  riskFactors         String?
+  fraudFlag           Boolean         @default(false)
+  fraudReason         String?
+  internalRemarks     String?
+  visitDate           DateTime?
+  visitAddress        String?
+  visitRemarks        String?
+  visitLatitude       Float?
+  visitLongitude      Float?
+  visitPhotos         String?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  deletedAt           DateTime?
+  loanApplication     LoanApplication @relation(fields: [loanApplicationId], references: [id])
+  @@index([loanApplicationId])
+}
+
+model SessionForm {
+  id                    String          @id @default(cuid())
+  loanApplicationId     String          @unique
+  agentId               String
+  approvedAmount        Float
+  interestRate          Float
+  tenure                Int
+  emiFrequency          String          @default("MONTHLY")
+  processingFee         Float           @default(0)
+  processingFeeType     String          @default("PERCENTAGE")
+  emiAmount             Float
+  totalInterest         Float
+  totalAmount           Float
+  moratoriumPeriod      Int             @default(0)
+  moratoriumType        String?
+  latePaymentPenalty    Float           @default(0)
+  bounceCharges         Float           @default(0)
+  specialConditions     String?
+  requestedAmount       Float?
+  requestedTenure       Int?
+  requestedInterestRate Float?
+  customerApproved      Boolean         @default(false)
+  customerApprovedAt    DateTime?
+  customerSignature     String?
+  customerSignatureHash String?
+  rejected              Boolean         @default(false)
+  rejectedAt            DateTime?
+  rejectionReason       String?
+  isLocked              Boolean         @default(false)
+  lockedAt              DateTime?
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+  deletedAt             DateTime?
+  agent                 User            @relation(fields: [agentId], references: [id])
+  loanApplication       LoanApplication @relation(fields: [loanApplicationId], references: [id])
+  @@index([loanApplicationId])
+  @@index([agentId])
+}
+
+model EMISchedule {
+  id                   String           @id @default(cuid())
+  loanApplicationId    String
+  installmentNumber    Int
+  dueDate              DateTime
+  originalDueDate      DateTime
+  principalAmount      Float
+  interestAmount       Float
+  totalAmount          Float
+  outstandingPrincipal Float
+  outstandingInterest  Float
+  paidAmount           Float            @default(0)
+  paidPrincipal        Float            @default(0)
+  paidInterest         Float            @default(0)
+  paymentStatus        EMIPaymentStatus @default(PENDING)
+  paidDate             DateTime?
+  paymentMode          String?
+  paymentReference     String?
+  utrNumber            String?
+  proofUrl             String?           // Payment proof document URL
+  notes                String?           // Payment notes
+  isPartialPayment     Boolean          @default(false)
+  nextPaymentDate      DateTime?
+  isInterestOnly       Boolean          @default(false)
+  principalDeferred    Boolean          @default(false)
+  penaltyAmount        Float            @default(0)
+  penaltyPaid          Float            @default(0)
+  waivedAmount         Float            @default(0)
+  waiverReason         String?
+  waivedById           String?
+  waivedAt             DateTime?
+  daysOverdue          Int              @default(0)
+  overdueNoticeSent    Boolean          @default(false)
+  lastNoticeDate       DateTime?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+  loanApplication      LoanApplication  @relation(fields: [loanApplicationId], references: [id])
+  payments             Payment[]
+  @@unique([loanApplicationId, installmentNumber])
+  @@index([loanApplicationId])
+  @@index([dueDate])
+  @@index([paymentStatus])
+}
+
+model Payment {
+  id                 String          @id @default(cuid())
+  loanApplicationId  String
+  emiScheduleId      String?
+  customerId         String
+  cashierId          String?
+  paidById           String?         // Who made the payment (staff/cashier/agent)
+  paymentType        PaymentType     @default(FULL_EMI)
+  amount             Float
+  principalComponent Float           @default(0)
+  interestComponent  Float           @default(0)
+  penaltyComponent   Float           @default(0)
+  transactionId      String?         @unique
+  utrNumber          String?
+  paymentMode        String?
+  paymentGateway     String?
+  gatewayResponse    String?
+  status             PaymentStatus   @default(PENDING)
+  verified           Boolean         @default(false)
+  verifiedById       String?
+  verifiedAt         DateTime?
+  receiptNumber      String?         @unique
+  receiptGenerated   Boolean         @default(false)
+  receiptSentAt      DateTime?
+  paymentLocation    String?
+  deviceInfo         String?
+  reconciled         Boolean         @default(false)
+  reconciledAt       DateTime?
+  reconciliationRef  String?
+  proofUrl           String?         // Payment proof document
+  remarks            String?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+  deletedAt          DateTime?
+  auditLogs          AuditLog[]
+  cashier            User?           @relation("CashierPayments", fields: [cashierId], references: [id])
+  customer           User            @relation("CustomerPayments", fields: [customerId], references: [id])
+  emiSchedule        EMISchedule?    @relation(fields: [emiScheduleId], references: [id])
+  loanApplication    LoanApplication @relation(fields: [loanApplicationId], references: [id])
+  @@index([loanApplicationId])
+  @@index([customerId])
+  @@index([status])
+  @@index([transactionId])
+}
+
+model WorkflowLog {
+  id                String          @id @default(cuid())
+  loanApplicationId String
+  actionById        String
+  previousStatus    String?
+  newStatus         String
+  action            String
+  remarks           String?
+  ipAddress         String?
+  userAgent         String?
+  location          String?
+  signatureHash     String?
+  createdAt         DateTime        @default(now())
+  actionBy          User            @relation(fields: [actionById], references: [id])
+  loanApplication   LoanApplication @relation(fields: [loanApplicationId], references: [id])
+  @@index([loanApplicationId])
+  @@index([actionById])
+}
+
+model AuditLog {
+  id                String           @id @default(cuid())
+  userId            String
+  loanApplicationId String?
+  paymentId         String?
+  action            String
+  module            String
+  description       String
+  oldValue          String?
+  newValue          String?
+  ipAddress         String?
+  userAgent         String?
+  location          String?
+  recordId          String?
+  recordType        String?
+  createdAt         DateTime         @default(now())
+  payment           Payment?         @relation(fields: [paymentId], references: [id])
+  loanApplication   LoanApplication? @relation(fields: [loanApplicationId], references: [id])
+  user              User             @relation(fields: [userId], references: [id])
+  @@index([userId])
+  @@index([module])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model LocationLog {
+  id                String   @id @default(cuid())
+  userId            String
+  latitude          Float
+  longitude         Float
+  accuracy          Float?
+  action            String
+  loanApplicationId String?
+  paymentId         String?
+  deviceId          String?
+  deviceType        String?
+  browser           String?
+  os                String?
+  ipAddress         String?
+  address           String?
+  city              String?
+  state             String?
+  country           String?
+  pincode           String?
+  createdAt         DateTime @default(now())
+  user              User     @relation(fields: [userId], references: [id])
+  @@index([userId])
+  @@index([createdAt])
+  @@index([action])
+}
+
+model NotificationSetting {
+  id                           String   @id @default(cuid())
+  userId                       String
+  enableEMIReminders           Boolean  @default(true)
+  reminderDaysBeforeDue        Int      @default(3)
+  enableOverdueAlerts          Boolean  @default(true)
+  enablePaymentConfirmation    Boolean  @default(true)
+  enableLoanStatusUpdates      Boolean  @default(true)
+  preferredChannel             String   @default("IN_APP")
+  reminderTime                 String   @default("09:00")
+  enableSMS                    Boolean  @default(false)
+  enableEmail                  Boolean  @default(false)
+  enablePush                   Boolean  @default(true)
+  customReminderMessage        String?
+  overdueReminderMessage       String?
+  createdAt                    DateTime @default(now())
+  updatedAt                    DateTime @updatedAt
+  user                         User     @relation(fields: [userId], references: [id])
+  @@index([userId])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+  data      String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+  @@index([userId])
+  @@index([isRead])
+}
+
+model Reminder {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String
+  title     String
+  message   String
+  scheduledAt DateTime
+  sentAt    DateTime?
+  status    String   @default("PENDING")
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+  @@index([userId])
+  @@index([scheduledAt])
+}
+
+model Blacklist {
+  id        String   @id @default(cuid())
+  userId    String
+  reason    String
+  blacklistedAt DateTime @default(now())
+  blacklistedBy String?
+  user      User     @relation(fields: [userId], references: [id])
+  @@index([userId])
+}
+
+model DeviceFingerprint {
+  id        String   @id @default(cuid())
+  userId    String
+  deviceId  String
+  deviceName String?
+  lastUsed  DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+  @@index([userId])
+  @@index([deviceId])
+}
+
+model Ledger {
+  id          String   @id @default(cuid())
+  companyId   String
+  type        String
+  amount      Float
+  description String?
+  reference   String?
+  createdAt   DateTime @default(now())
+  company     Company  @relation(fields: [companyId], references: [id])
+  @@index([companyId])
+}
+
+model SystemSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CMSService {
+  id                  String   @id @default(cuid())
+  title               String
+  description         String
+  icon                String?
+  loanType            String   @default("PERSONAL")
+  minInterestRate     Float    @default(8)
+  maxInterestRate     Float    @default(24)
+  defaultInterestRate Float    @default(12)
+  minTenure           Int      @default(6)
+  maxTenure           Int      @default(60)
+  defaultTenure       Int      @default(12)
+  minAmount           Float    @default(10000)
+  maxAmount           Float    @default(10000000)
+  processingFeePercent Float   @default(1)
+  processingFeeMin    Float    @default(500)
+  processingFeeMax    Float    @default(10000)
+  latePaymentPenaltyPercent Float @default(2)
+  gracePeriodDays     Int      @default(5)
+  bounceCharges       Float    @default(500)
+  allowMoratorium     Boolean  @default(true)
+  maxMoratoriumMonths Int      @default(3)
+  allowPrepayment     Boolean  @default(true)
+  prepaymentCharges   Float    @default(2)
+  isActive            Boolean  @default(true)
+  order               Int      @default(0)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model CMSBanner {
+  id          String   @id @default(cuid())
+  title       String
+  subtitle    String?
+  imageUrl    String?
+  linkUrl     String?
+  buttonText  String?
+  isActive    Boolean  @default(true)
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model CMSTestimonial {
+  id            String   @id @default(cuid())
+  customerName  String
+  designation   String?
+  content       String
+  rating        Int      @default(5)
+  imageUrl      String?
+  isActive      Boolean  @default(true)
+  order         Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model FormConfig {
+  id          String   @id @default(cuid())
+  formType    String   @unique
+  fields      String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model UploadedFile {
+  id          String   @id @default(cuid())
+  filename    String
+  originalName String
+  mimeType    String
+  size        Int
+  path        String
+  uploadedBy  String?
+  createdAt   DateTime @default(now())
+  @@index([uploadedBy])
+}
+
+// ==================== ACCOUNTING MODULE ====================
+
+// Chart of Accounts - Master ledger accounts
+model ChartOfAccount {
+  id              String           @id @default(cuid())
+  companyId       String           @default("default") // Company this account belongs to
+  accountCode     String           
+  accountName     String
+  accountType     AccountType
+  parentAccountId String?
+  parentAccount   ChartOfAccount?  @relation("AccountHierarchy", fields: [parentAccountId], references: [id])
+  subAccounts     ChartOfAccount[] @relation("AccountHierarchy")
+  description     String?
+  isSystemAccount Boolean          @default(false)
+  isActive        Boolean          @default(true)
+  openingBalance  Float            @default(0)
+  currentBalance  Float            @default(0)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  journalLines    JournalEntryLine[]
+  ledgerBalances  LedgerBalance[]
+  company         Company?         @relation(fields: [companyId], references: [id])
+  @@unique([companyId, accountCode])
+  @@index([companyId])
+  @@index([accountCode])
+  @@index([accountType])
+  @@index([isActive])
+}
+
+// Financial Years
+model FinancialYear {
+  id               String         @id @default(cuid())
+  companyId        String         @default("default") // Company this financial year belongs to
+  name             String         
+  startDate        DateTime
+  endDate          DateTime
+  isClosed         Boolean        @default(false)
+  closedAt         DateTime?
+  closedById       String?
+  previousYearId   String?
+  carryForwardDone Boolean       @default(false)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  ledgerBalances   LedgerBalance[]
+  company          Company?       @relation(fields: [companyId], references: [id])
+  @@unique([companyId, name])
+  @@index([companyId])
+  @@index([startDate])
+  @@index([endDate])
+  @@index([isClosed])
+}
+
+// Ledger Balances - Year-wise account balances
+model LedgerBalance {
+  id               String          @id @default(cuid())
+  accountId        String
+  financialYearId  String
+  openingBalance   Float           @default(0)
+  totalDebits      Float           @default(0)
+  totalCredits     Float           @default(0)
+  closingBalance   Float           @default(0)
+  account          ChartOfAccount  @relation(fields: [accountId], references: [id])
+  financialYear    FinancialYear   @relation(fields: [financialYearId], references: [id])
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  @@unique([accountId, financialYearId])
+  @@index([accountId])
+  @@index([financialYearId])
+}
+
+// Journal Entries - Main entry header
+model JournalEntry {
+  id                String              @id @default(cuid())
+  companyId         String              @default("default") // Company this journal entry belongs to
+  entryNumber       String              
+  entryDate         DateTime
+  referenceType     String?             // LOAN_DISBURSEMENT, EMI_PAYMENT, FEE_COLLECTION, MANUAL, etc.
+  referenceId       String?             // Loan ID, Payment ID, etc.
+  narration         String?
+  totalDebit        Float               @default(0)
+  totalCredit       Float               @default(0)
+  isAutoEntry       Boolean             @default(false)
+  isReversed        Boolean             @default(false)
+  reversedById      String?
+  reversedAt        DateTime?
+  isApproved        Boolean             @default(false)
+  approvedById      String?
+  approvedAt        DateTime?
+  createdById       String
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  // Payment details for tracking
+  paymentMode       String?             // CASH, BANK_TRANSFER, CHEQUE, UPI, etc.
+  chequeNumber      String?
+  chequeDate        DateTime?
+  bankRefNumber     String?
+  bankAccountId     String?
+  lines             JournalEntryLine[]
+  company           Company?            @relation(fields: [companyId], references: [id])
+  @@unique([companyId, entryNumber])
+  @@index([companyId])
+  @@index([entryNumber])
+  @@index([entryDate])
+  @@index([referenceType])
+  @@index([referenceId])
+  @@index([isAutoEntry])
+  @@index([isApproved])
+  @@index([paymentMode])
+  @@index([bankAccountId])
+}
+
+// Journal Entry Lines - Individual debit/credit lines
+model JournalEntryLine {
+  id              String        @id @default(cuid())
+  journalEntryId  String
+  accountId       String
+  debitAmount     Float         @default(0)
+  creditAmount    Float         @default(0)
+  narration       String?
+  loanId          String?
+  customerId      String?
+  runningBalance  Float?        @default(0)
+  balanceType     String?       // DEBIT or CREDIT
+  createdAt       DateTime      @default(now())
+  account         ChartOfAccount @relation(fields: [accountId], references: [id])
+  journalEntry    JournalEntry  @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  @@index([journalEntryId])
+  @@index([accountId])
+  @@index([loanId])
+  @@index([customerId])
+}
+
+// Reports Cache - Store generated reports
+model ReportsCache {
+  id              String   @id @default(cuid())
+  reportType      String
+  reportName      String
+  parameters      String   // JSON string of parameters
+  generatedAt     DateTime @default(now())
+  data            String   // JSON string of report data
+  generatedById   String
+  expiresAt       DateTime?
+  createdAt       DateTime @default(now())
+  @@index([reportType])
+  @@index([generatedAt])
+  @@index([generatedById])
+}
+
+// Expense Management
+model Expense {
+  id              String       @id @default(cuid())
+  companyId       String       @default("default") // Company this expense belongs to
+  expenseNumber   String
+  expenseType     String       // SALARY, RENT, MARKETING, COMMISSION, etc.
+  description     String
+  amount          Float
+  paymentDate     DateTime
+  paymentMode     String       // CASH, BANK_TRANSFER, CHEQUE, etc.
+  paymentReference String?
+  payeeName       String?
+  payeeId         String?
+  categoryId      String?
+  isApproved      Boolean      @default(false)
+  approvedById    String?
+  approvedAt      DateTime?
+  createdById     String
+  receiptUrl      String?
+  remarks         String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  company         Company?     @relation(fields: [companyId], references: [id])
+  @@unique([companyId, expenseNumber])
+  @@index([companyId])
+  @@index([expenseNumber])
+  @@index([expenseType])
+  @@index([paymentDate])
+  @@index([isApproved])
+}
+
+// Bank Transaction Log - Tracks all bank movements
+model BankTransaction {
+  id              String   @id @default(cuid())
+  bankAccountId   String
+  transactionType String   // CREDIT (money in) or DEBIT (money out)
+  amount          Float
+  balanceAfter    Float    // Balance after this transaction
+  description     String
+  referenceType   String   // LOAN_DISBURSEMENT, EMI_PAYMENT, EXPENSE, etc.
+  referenceId     String?  // ID of the related record
+  createdById     String
+  transactionDate DateTime @default(now())
+  createdAt       DateTime @default(now())
+  bankAccount     BankAccount @relation(fields: [bankAccountId], references: [id])
+  @@index([bankAccountId])
+  @@index([transactionDate])
+  @@index([referenceType])
+}
+
+// GST Configuration
+model GSTConfig {
+  id              String   @id @default(cuid())
+  companyId       String   @default("default") // Company this GST config belongs to
+  gstRate         Float
+  gstType         String   // CGST, SGST, IGST
+  applicableFrom  DateTime
+  applicableTo    DateTime?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  company         Company? @relation(fields: [companyId], references: [id])
+  @@unique([companyId, gstType, applicableFrom])
+  @@index([companyId])
+  @@index([gstType])
+  @@index([isActive])
+}
+
+// Bank Accounts
+model BankAccount {
+  id              String   @id @default(cuid())
+  companyId       String   @default("default") // Company this bank account belongs to
+  bankName        String
+  accountNumber   String
+  accountName     String
+  branchName      String?
+  ifscCode        String?
+  accountType     String   // SAVINGS, CURRENT, etc.
+  openingBalance  Float    @default(0)
+  currentBalance  Float    @default(0)
+  isActive        Boolean  @default(true)
+  isDefault       Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  company         Company? @relation(fields: [companyId], references: [id])
+  transactions    BankTransaction[]
+  @@unique([companyId, accountNumber])
+  @@index([companyId])
+  @@index([accountNumber])
+  @@index([isActive])
+}
+
+// Accounting Settings
+model AccountingSettings {
+  id                    String   @id @default(cuid())
+  companyId             String   @unique
+  financialYearStart    Int      @default(4)  // Month (April = 4)
+  financialYearEnd      Int      @default(3)  // Month (March = 3)
+  currency              String   @default("INR")
+  currencySymbol        String   @default("₹")
+  decimalPlaces         Int      @default(2)
+  enableGST             Boolean  @default(false)
+  gstNumber             String?
+  gstRate               Float    @default(18)
+  enableTDS             Boolean  @default(false)
+  tdsRate               Float    @default(10)
+  fiscalYearPrefix      String   @default("FY")
+  journalEntryPrefix    String   @default("JE")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+// Company Accounting Settings Extension
+model CompanyAccountingSettings {
+  id                        String   @id @default(cuid())
+  companyId                 String   @unique
+  defaultBankAccountId      String?
+  autoJournalEntries        Boolean  @default(true)
+  requireApproval           Boolean  @default(false)
+  approvalThreshold         Float    @default(100000)
+  enableCostCenter          Boolean  @default(false)
+  enableProjectAccounting   Boolean  @default(false)
+  retainedEarningsAccountId String?
+  suspenseAccountId         String?
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+}
+
+// Account Types Enum
+enum AccountType {
+  ASSET
+  LIABILITY
+  INCOME
+  EXPENSE
+  EQUITY
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  COMPANY
+  AGENT
+  STAFF
+  CASHIER
+  CUSTOMER
+  ACCOUNTANT
+}
+
+enum LoanStatus {
+  SUBMITTED
+  SA_APPROVED
+  COMPANY_APPROVED
+  AGENT_APPROVED_STAGE1
+  LOAN_FORM_COMPLETED
+  SESSION_CREATED
+  CUSTOMER_SESSION_APPROVED
+  FINAL_APPROVED
+  DISBURSED
+  ACTIVE
+  CLOSED
+  REJECTED_BY_SA
+  REJECTED_BY_COMPANY
+  REJECTED_FINAL
+  SESSION_REJECTED
+}
+
+enum LoanType {
+  PERSONAL
+  BUSINESS
+  HOME
+  VEHICLE
+  EDUCATION
+  GOLD
+  OTHER
+}
+
+enum EMIPaymentStatus {
+  PENDING
+  PAID
+  PARTIALLY_PAID
+  OVERDUE
+  INTEREST_ONLY_PAID
+  WAIVED
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum PaymentType {
+  FULL_EMI
+  PARTIAL_PAYMENT
+  INTEREST_ONLY
+  PENALTY
+  PROCESSING_FEE
+  FORECLOSURE
+}
+
+// ==================== ADVANCED LOAN FEATURES ====================
+
+// Pre-Approved Loan Offers
+model PreApprovedOffer {
+  id                  String   @id @default(cuid())
+  customerId          String
+  companyId           String
+  offerAmount         Float
+  interestRate        Float
+  maxTenure           Int
+  validTill           DateTime
+  status              String   @default("PENDING") // PENDING, ACCEPTED, EXPIRED, REJECTED
+  basedOnScore        Int?
+  basedOnHistory      Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  customer            User     @relation(fields: [customerId], references: [id])
+  company             Company  @relation(fields: [companyId], references: [id])
+  @@index([customerId])
+  @@index([companyId])
+  @@index([status])
+}
+
+// Loan Top-Up Requests
+model LoanTopUp {
+  id                  String   @id @default(cuid())
+  loanApplicationId   String
+  requestedAmount     Float
+  approvedAmount      Float?
+  status              String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  reason              String?
+  mergedEMI           Float?
+  revisedTenure       Int?
+  approvedById        String?
+  approvedAt          DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  loanApplication     LoanApplication @relation(fields: [loanApplicationId], references: [id])
+  @@index([loanApplicationId])
+  @@index([status])
+}
+
+// Foreclosure Requests
+model ForeclosureRequest {
+  id                  String   @id @default(cuid())
+  loanApplicationId   String
+  requestType         String   @default("FULL") // FULL, PARTIAL
+  outstandingPrincipal Float
+  pendingInterest     Float
+  penaltyCharges      Float    @default(0)
+  totalSettlement     Float
+  status              String   @default("PENDING") // PENDING, APPROVED, COMPLETED, REJECTED
+  requestedById       String
+  approvedById        String?
+  approvedAt          DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  loanApplication     LoanApplication @relation(fields: [loanApplicationId], references: [id])
+  @@index([loanApplicationId])
+  @@index([status])
+}
+
+// EMI Date Change Requests
+model EMIDateChangeRequest {
+  id                  String   @id @default(cuid())
+  loanApplicationId   String
+  currentDueDate      Int      // Day of month (1-31)
+  requestedDueDate    Int
+  reason              String?
+  status              String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  approvedById        String?
+  approvedAt          DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  loanApplication     LoanApplication @relation(fields: [loanApplicationId], references: [id])
+  @@index([loanApplicationId])
+  @@index([status])
+}
+
+// Counter Offers (Agent <-> Customer negotiation)
+model CounterOffer {
+  id                  String   @id @default(cuid())
+  loanApplicationId   String
+  offeredById         String   // Who made the offer
+  offeredToId         String   // Who receives the offer
+  offeredAmount       Float
+  interestRate        Float
+  tenure              Int
+  message             String?
+  status              String   @default("PENDING") // PENDING, ACCEPTED, REJECTED, COUNTERED
+  parentOfferId       String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  loanApplication     LoanApplication @relation(fields: [loanApplicationId], references: [id])
+  @@index([loanApplicationId])
+  @@index([status])
+}
+
+// Document Re-Upload Requests
+model DocumentRequest {
+  id                  String   @id @default(cuid())
+  loanApplicationId   String
+  documentType        String   // PAN, AADHAAR, INCOME_PROOF, etc.
+  reason              String
+  status              String   @default("PENDING") // PENDING, UPLOADED, VERIFIED
+  requestedById       String
+  uploadedAt          DateTime?
+  verifiedAt          DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  loanApplication     LoanApplication @relation(fields: [loanApplicationId], references: [id])
+  @@index([loanApplicationId])
+  @@index([status])
+}
+
+// Commission Slabs
+model CommissionSlab {
+  id                  String   @id @default(cuid())
+  companyId           String
+  name                String   // Bronze, Silver, Gold
+  minDisbursement     Float    @default(0)
+  maxDisbursement     Float?
+  commissionRate      Float    // Percentage
+  minApprovalRatio    Float    @default(0)
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  company             Company  @relation(fields: [companyId], references: [id])
+  @@index([companyId])
+}
+
+// Agent Performance & Risk Alerts
+model AgentPerformance {
+  id                  String   @id @default(cuid())
+  agentId             String
+  companyId           String
+  month               String   // YYYY-MM format
+  totalDisbursed      Float    @default(0)
+  totalApplications   Int      @default(0)
+  approvedCount       Int      @default(0)
+  rejectedCount       Int      @default(0)
+  approvalRatio       Float    @default(0)
+  defaultCount        Int      @default(0)
+  defaultRatio        Float    @default(0)
+  commissionEarned    Float    @default(0)
+  slabId              String?
+  isFlagged           Boolean  @default(false)
+  flagReason          String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  agent               User     @relation(fields: [agentId], references: [id])
+  company             Company  @relation(fields: [companyId], references: [id])
+  @@unique([agentId, month])
+  @@index([agentId])
+  @@index([companyId])
+}
+
+// Grace Period Configuration
+model GracePeriodConfig {
+  id                  String   @id @default(cuid())
+  companyId           String
+  loanType            String   @default("ALL")
+  graceDays           Int      @default(5)
+  penaltyAfterGrace   Float    @default(2) // Percentage
+  dailyPenalty        Float    @default(0.1) // Daily percentage after grace
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  company             Company  @relation(fields: [companyId], references: [id])
+  @@index([companyId])
+}
+
+// Loan Restructure Requests
+model LoanRestructure {
+  id                  String   @id @default(cuid())
+  loanApplicationId   String
+  reason              String
+  originalTenure      Int
+  newTenure           Int
+  originalEMI         Float
+  newEMI              Float
+  status              String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  approvedById        String?
+  approvedAt          DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  loanApplication     LoanApplication @relation(fields: [loanApplicationId], references: [id])
+  @@index([loanApplicationId])
+  @@index([status])
+}
+
+// NPA (Non-Performing Asset) Tracking
+model NPATracking {
+  id                  String   @id @default(cuid())
+  loanApplicationId   String
+  daysOverdue         Int
+  npaDate             DateTime?
+  npaStatus           String   @default("SMA0") // SMA0, SMA1, SMA2, NPA
+  recoveryStatus      String?
+  recoveryAgentId     String?
+  totalOverdue        Float
+  lastContactDate     DateTime?
+  settlementAmount    Float?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  loanApplication     LoanApplication @relation(fields: [loanApplicationId], references: [id])
+  @@index([loanApplicationId])
+  @@index([npaStatus])
+}
+
+// Credit Risk Score History
+model CreditRiskScore {
+  id                  String   @id @default(cuid())
+  loanApplicationId   String?
+  customerId          String
+  score               Int
+  factors             String?  // JSON string with factor breakdown
+  incomeRatio         Float?
+  emiToIncomeRatio    Float?
+  employmentScore     Int?
+  repaymentHistory    Int?
+  geoRiskScore        Int?
+  createdAt           DateTime @default(now())
+  customer            User     @relation(fields: [customerId], references: [id])
+  @@index([customerId])
+  @@index([loanApplicationId])
+}
+
+// Fraud Detection Alerts
+model FraudAlert {
+  id                  String   @id @default(cuid())
+  loanApplicationId   String?
+  alertType           String   // MULTIPLE_PAN, MULTIPLE_PHONE, DEVICE_MISMATCH, GEO_ANOMALY, etc.
+  severity            String   @default("MEDIUM") // LOW, MEDIUM, HIGH, CRITICAL
+  details             String?  // JSON string with details
+  isResolved          Boolean  @default(false)
+  resolvedById        String?
+  resolvedAt          DateTime?
+  createdAt           DateTime @default(now())
+  loanApplication     LoanApplication? @relation(fields: [loanApplicationId], references: [id])
+  @@index([loanApplicationId])
+  @@index([alertType])
+  @@index([isResolved])
+}
+
+// Customer Referrals
+model Referral {
+  id                  String   @id @default(cuid())
+  referrerId          String
+  referredEmail       String
+  referredPhone       String?
+  referredCustomerId  String?
+  status              String   @default("PENDING") // PENDING, REGISTERED, DISBURSED, COMMISSIONED
+  commissionAmount    Float    @default(0)
+  commissionPaid      Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  referrer            User     @relation(fields: [referrerId], references: [id])
+  @@index([referrerId])
+  @@index([referredEmail])
+}
+
+// Appointment Scheduling
+model Appointment {
+  id                  String   @id @default(cuid())
+  loanApplicationId   String?
+  customerId          String
+  staffId             String?
+  scheduledAt         DateTime
+  type                String   // VERIFICATION, DOCUMENT_COLLECTION, SIGNATURE, etc.
+  location            String?
+  latitude            Float?
+  longitude           Float?
+  status              String   @default("SCHEDULED") // SCHEDULED, COMPLETED, CANCELLED, NO_SHOW
+  notes               String?
+  checkInAt           DateTime?
+  checkInLatitude     Float?
+  checkInLongitude    Float?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  loanApplication     LoanApplication? @relation(fields: [loanApplicationId], references: [id])
+  @@index([customerId])
+  @@index([staffId])
+  @@index([status])
+}
+
+// E-Agreement / Digital Signature
+model LoanAgreement {
+  id                  String   @id @default(cuid())
+  loanApplicationId   String   @unique
+  agreementNumber     String   @unique
+  generatedAt         DateTime @default(now())
+  signedAt            DateTime?
+  customerSignature   String?
+  customerIp          String?
+  agreementPdf        String?
+  termsAccepted       Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  loanApplication     LoanApplication @relation(fields: [loanApplicationId], references: [id])
+  @@index([loanApplicationId])
+}
+
+// Multiple Application Detection
+model ApplicationFingerprint {
+  id                  String   @id @default(cuid())
+  panNumber           String?
+  phoneNumber         String?
+  emailAddress        String?
+  deviceId            String?
+  ipAddress           String?
+  loanApplicationId   String
+  isDuplicate         Boolean  @default(false)
+  matchedWith         String?  // IDs of matched applications
+  createdAt           DateTime @default(now())
+  loanApplication     LoanApplication @relation(fields: [loanApplicationId], references: [id])
+  @@index([panNumber])
+  @@index([phoneNumber])
+  @@index([emailAddress])
+  @@index([deviceId])
+}
+
+// Loan Progress Timeline
+model LoanProgressTimeline {
+  id                  String   @id @default(cuid())
+  loanApplicationId   String
+  stage               String
+  status              String   // PENDING, COMPLETED, FAILED
+  timestamp           DateTime @default(now())
+  handlerId           String?
+  notes               String?
+  createdAt           DateTime @default(now())
+  loanApplication     LoanApplication @relation(fields: [loanApplicationId], references: [id])
+  @@index([loanApplicationId])
+  @@index([stage])
+}
+
+// ==================== CREDIT & COLLECTION SYSTEM ====================
+
+// Credit Transaction - Track all credit movements (EMI payments by roles)
+model CreditTransaction {
+  id                  String              @id @default(cuid())
+  userId              String              // User whose credit is affected
+  transactionType     CreditTransactionType // CREDIT_INCREASE, CREDIT_DECREASE, SETTLEMENT, PERSONAL_CLEARANCE
+  amount              Float               // Amount involved
+  paymentMode         PaymentModeType     // CASH, CHEQUE, ONLINE, UPI, BANK_TRANSFER
+  
+  // Dual Credit System
+  creditType          CreditType          @default(COMPANY) // COMPANY or PERSONAL
+  companyBalanceAfter Float?              // Company credit balance after this transaction
+  personalBalanceAfter Float?             // Personal credit balance after this transaction
+  balanceAfter        Float               // Total credit balance after this transaction (legacy)
+  
+  // Reference to what caused this transaction
+  sourceType          String              // EMI_PAYMENT, SETTLEMENT, ADJUSTMENT, PERSONAL_COLLECTION
+  sourceId            String?             // Payment ID, Settlement ID, etc.
+  
+  // EMI Payment Details (when source is EMI_PAYMENT)
+  loanApplicationId   String?
+  emiScheduleId       String?
+  customerId          String?
+  installmentNumber   Int?
+  
+  // Customer Details (for quick reference without joins)
+  customerName        String?
+  customerPhone       String?
+  loanApplicationNo   String?
+  
+  // EMI Details (for quick reference)
+  emiDueDate          DateTime?
+  emiAmount           Float?
+  principalComponent  Float?
+  interestComponent   Float?
+  
+  // Additional details
+  chequeNumber        String?
+  chequeDate          DateTime?
+  bankRefNumber       String?
+  utrNumber           String?
+  description         String?
+  remarks             String?
+  
+  // Proof Document (required for CHEQUE, ONLINE, and PERSONAL transactions)
+  proofDocument       String?             // File path to uploaded proof
+  proofType           String?             // Type of proof (image, pdf, etc.)
+  proofUploadedAt     DateTime?
+  proofVerified       Boolean             @default(false)
+  proofVerifiedBy     String?
+  proofVerifiedAt     DateTime?
+  
+  // For settlements
+  settlementId        String?             // Reference to CashierSettlement
+  
+  // Collection Details
+  collectedFrom       String?             // Name of person who paid
+  collectedFromPhone  String?             // Phone of person who paid
+  collectionLocation  String?             // Location where payment was collected
+  collectionLatitude  Float?
+  collectionLongitude Float?
+  
+  // Timestamps
+  transactionDate     DateTime            @default(now()) // When the actual transaction happened
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  
+  // Relations
+  user                User                @relation("UserCreditTransactions", fields: [userId], references: [id])
+  settlement          CashierSettlement?  @relation(fields: [settlementId], references: [id])
+  
+  @@index([userId])
+  @@index([transactionType])
+  @@index([paymentMode])
+  @@index([creditType])
+  @@index([sourceType])
+  @@index([loanApplicationId])
+  @@index([customerId])
+  @@index([createdAt])
+  @@index([transactionDate])
+}
+
+// Cashier Settlement - When role gives money to cashier
+model CashierSettlement {
+  id                  String              @id @default(cuid())
+  settlementNumber    String              @unique
+  userId              String              // User giving the money
+  cashierId           String              // Cashier receiving the money
+  amount              Float               // Total amount settled
+  paymentMode         PaymentModeType     // CASH, CHEQUE, ONLINE
+  // Payment details
+  chequeNumber        String?
+  chequeDate          DateTime?
+  bankRefNumber       String?
+  utrNumber           String?
+  // Status
+  status              SettlementStatus    @default(PENDING) // PENDING, VERIFIED, COMPLETED
+  verifiedById        String?             // Accountant who verified
+  verifiedAt          DateTime?
+  // Denomination breakdown for cash
+  cashDenominations   String?             // JSON string with denomination breakdown
+  // Remarks
+  remarks             String?
+  rejectionReason     String?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  user                User                @relation("UserSettlements", fields: [userId], references: [id])
+  cashier             User                @relation("CashierReceivedSettlements", fields: [cashierId], references: [id])
+  creditTransactions  CreditTransaction[]
+  @@index([userId])
+  @@index([cashierId])
+  @@index([status])
+  @@index([paymentMode])
+  @@index([createdAt])
+}
+
+// Daily Collection Summary - Aggregated daily collection data
+model DailyCollection {
+  id                  String              @id @default(cuid())
+  date                DateTime            @default(now())
+  // Collection by mode
+  totalCash           Float               @default(0)
+  totalCheque         Float               @default(0)
+  totalOnline         Float               @default(0)
+  totalAmount         Float               @default(0)
+  // Counts
+  totalTransactions   Int                 @default(0)
+  emiPaymentsCount    Int                 @default(0)
+  settlementsCount    Int                 @default(0)
+  // Breakdown by role
+  superAdminCollection Float              @default(0)
+  companyCollection   Float               @default(0)
+  agentCollection     Float               @default(0)
+  staffCollection     Float               @default(0)
+  cashierCollection   Float               @default(0)
+  customerDirect      Float               @default(0)
+  // Metadata
+  companyId           String?
+  branchId            String?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  @@unique([date])
+  @@index([date])
+  @@index([companyId])
+}
+
+// Credit Transaction Types Enum
+enum CreditTransactionType {
+  CREDIT_INCREASE     // When role collects EMI payment
+  CREDIT_DECREASE     // When role settles with cashier/superadmin
+  SETTLEMENT          // When cashier receives payment
+  ADJUSTMENT          // Manual adjustment by admin
+  PERSONAL_CLEARANCE  // When personal credit is cleared by superadmin
+  PERSONAL_COLLECTION // When money collected in personal account
+}
+
+// Credit Type Enum - Dual Credit System
+enum CreditType {
+  COMPANY             // Company credit - only CASH increases this
+  PERSONAL            // Personal credit - requires proof for all transactions
+}
+
+// Payment Mode Enum
+enum PaymentModeType {
+  CASH                // Only CASH increases company credit
+  CHEQUE              // Requires proof, doesn't increase company credit
+  ONLINE              // Requires proof, doesn't increase company credit
+  UPI                 // Requires proof, doesn't increase company credit
+  BANK_TRANSFER       // Requires proof, doesn't increase company credit
+  SYSTEM              // For system-generated transactions (deductions, transfers, etc.)
+}
+
+// Settlement Status Enum
+enum SettlementStatus {
+  PENDING
+  VERIFIED
+  COMPLETED
+  REJECTED
+}
+
+// ==================== OFFLINE LOAN SYSTEM ====================
+
+// Offline Loan - Created by SuperAdmin or Agent directly
+model OfflineLoan {
+  id                    String              @id @default(cuid())
+  loanNumber            String              @unique
+  // Creator info
+  createdById           String              // Who created this loan (SuperAdmin or Agent)
+  createdByRole         String              // SUPER_ADMIN, AGENT
+  companyId             String?
+  // Customer info (can be new or existing)
+  customerId            String?             // Link to existing user if available
+  customerName          String
+  customerPhone         String
+  customerEmail         String?
+  customerAadhaar       String?
+  customerPan           String?
+  customerAddress       String?
+  customerCity          String?
+  customerState         String?
+  customerPincode       String?
+  customerDOB           DateTime?
+  customerOccupation    String?
+  customerMonthlyIncome Float?
+  // Reference contacts
+  reference1Name        String?
+  reference1Phone       String?
+  reference1Relation    String?
+  reference2Name        String?
+  reference2Phone       String?
+  reference2Relation    String?
+  // Loan details
+  loanType              LoanType            @default(PERSONAL)
+  loanAmount            Float
+  interestRate          Float
+  tenure                Int                 // in months
+  emiAmount             Float
+  processingFee         Float               @default(0)
+  disbursementDate      DateTime
+  disbursementMode      String?             // CASH, BANK_TRANSFER, CHEQUE
+  disbursementRef       String?             // Transaction reference
+  // Status
+  status                OfflineLoanStatus   @default(ACTIVE)
+  // Payment options control
+  allowInterestOnly     Boolean             @default(true)    // Allow interest-only payments
+  allowPartialPayment   Boolean             @default(true)    // Allow partial payments
+  // Dates
+  startDate             DateTime            // EMI start date
+  closedAt              DateTime?
+  // Notes
+  notes                 String?
+  internalNotes         String?
+  // Timestamps
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  // Relations
+  emis                  OfflineLoanEMI[]
+  createdBy             User                @relation("OfflineLoanCreator", fields: [createdById], references: [id])
+  company               Company?            @relation(fields: [companyId], references: [id])
+  customer              User?               @relation("OfflineLoanCustomer", fields: [customerId], references: [id])
+  @@index([loanNumber])
+  @@index([createdById])
+  @@index([customerId])
+  @@index([status])
+  @@index([disbursementDate])
+}
+
+// Offline Loan EMI Schedule
+model OfflineLoanEMI {
+  id                    String              @id @default(cuid())
+  offlineLoanId         String
+  installmentNumber     Int
+  dueDate               DateTime
+  principalAmount       Float
+  interestAmount        Float
+  totalAmount           Float
+  outstandingPrincipal  Float
+  // Payment tracking
+  paidAmount            Float               @default(0)
+  paidPrincipal         Float               @default(0)
+  paidInterest          Float               @default(0)
+  paymentStatus         EMIPaymentStatus    @default(PENDING)
+  paidDate              DateTime?
+  paymentMode           String?
+  paymentReference      String?
+  // Penalty
+  penaltyAmount         Float               @default(0)
+  penaltyPaid           Float               @default(0)
+  daysOverdue           Int                 @default(0)
+  // Collection tracking
+  collectedById         String?             // Who collected the payment
+  collectedByName       String?             // Name of collector
+  collectedAt           DateTime?
+  // Reminder tracking
+  reminderSent          Boolean             @default(false)
+  reminderSentAt        DateTime?
+  // Deferred EMI tracking (for interest-only payments)
+  isDeferred            Boolean             @default(false)    // True if this EMI was deferred due to interest-only payment
+  deferredFromEMI       Int?                                   // Original EMI number this was deferred from
+  // Timestamps
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  // Relations
+  offlineLoan           OfflineLoan         @relation(fields: [offlineLoanId], references: [id], onDelete: Cascade)
+  collector             User?               @relation(fields: [collectedById], references: [id])
+  @@unique([offlineLoanId, installmentNumber])
+  @@index([offlineLoanId])
+  @@index([dueDate])
+  @@index([paymentStatus])
+  @@index([collectedById])
+}
+
+// EMI Reminder Log - Track all reminders sent
+model EMIReminderLog {
+  id                    String              @id @default(cuid())
+  // EMI reference (can be online or offline)
+  emiScheduleId         String?             // For online loans
+  offlineLoanEMIId      String?             // For offline loans
+  // Recipient info
+  userId                String              // Who received the reminder
+  userRole              String              // Role of the recipient
+  // Reminder details
+  reminderType          String              // EMI_DUE_TODAY, EMI_DUE_TOMORROW, EMI_OVERDUE, etc.
+  loanId                String              // Loan reference
+  loanNumber            String              // Loan number for display
+  customerName          String              // Customer name
+  emiAmount             Float               // EMI amount
+  dueDate               DateTime            // EMI due date
+  // Status
+  sentAt                DateTime            @default(now())
+  sentVia               String              // IN_APP, SMS, EMAIL
+  isRead                Boolean             @default(false)
+  readAt                DateTime?
+  // Timestamps
+  createdAt             DateTime            @default(now())
+  // Relations
+  user                  User                @relation(fields: [userId], references: [id])
+  @@index([userId])
+  @@index([emiScheduleId])
+  @@index([offlineLoanEMIId])
+  @@index([sentAt])
+  @@index([reminderType])
+}
+
+// Offline Loan Status Enum
+enum OfflineLoanStatus {
+  ACTIVE
+  CLOSED
+  DEFAULTED
+  RESTRUCTURED
+}
+
+// Action Log - For undo/redo functionality
+model ActionLog {
+  id                    String              @id @default(cuid())
+  // Who performed the action
+  userId                String
+  userRole              String
+  // Action details
+  actionType            String              // CREATE, UPDATE, DELETE, PAYMENT, etc.
+  module                String              // OFFLINE_LOAN, EMI_PAYMENT, SETTLEMENT, etc.
+  recordId              String              // ID of the affected record
+  recordType            String              // OfflineLoan, OfflineLoanEMI, Payment, etc.
+  // Data snapshots
+  previousData          String?             // JSON string of data before action
+  newData               String?             // JSON string of data after action
+  // Undo tracking
+  canUndo               Boolean             @default(true)
+  isUndone              Boolean             @default(false)
+  undoneAt              DateTime?
+  undoneById            String?
+  // Redo tracking
+  canRedo               Boolean             @default(false)
+  isRedone              Boolean             @default(false)
+  redoneAt              DateTime?
+  redoneById            String?
+  // Metadata
+  description           String
+  ipAddress             String?
+  userAgent             String?
+  // Timestamps
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  // Relations
+  user                  User                @relation(fields: [userId], references: [id])
+  undoneBy              User?               @relation("ActionUndoBy", fields: [undoneById], references: [id])
+  redoneBy              User?               @relation("ActionRedoBy", fields: [redoneById], references: [id])
+  @@index([userId])
+  @@index([actionType])
+  @@index([module])
+  @@index([recordId])
+}
+
+// ==================== FIXED ASSETS MANAGEMENT ====================
+
+// Fixed Asset - Track company's fixed assets with depreciation
+model FixedAsset {
+  id                    String              @id @default(cuid())
+  companyId             String              @default("default")
+  
+  // Asset Identification
+  assetCode             String              // Unique asset code (e.g., FA-001)
+  assetName             String              // Name of the asset
+  assetCategory         AssetCategory       // Category of the asset
+  
+  // Asset Details
+  description           String?             // Detailed description
+  serialNumber          String?             // Serial number for equipment
+  location              String?             // Physical location of asset
+  department            String?             // Department using the asset
+  
+  // Financial Details
+  purchaseDate          DateTime            // Date of purchase
+  purchaseCost          Float               // Original purchase cost
+  additionalCosts       Float               @default(0) // Installation, transport, etc.
+  totalCost             Float               // purchaseCost + additionalCosts
+  salvageValue          Float               @default(0) // Expected salvage/residual value
+  usefulLifeYears       Int                 // Estimated useful life in years
+  usefulLifeMonths      Int                 // Useful life in months
+  
+  // Depreciation Details
+  depreciationMethod    DepreciationMethod  @default(STRAIGHT_LINE)
+  depreciationRate      Float               @default(0) // Annual depreciation rate (%)
+  accumulatedDepreciation Float             @default(0) // Total depreciation till date
+  currentBookValue      Float               @default(0) // Current book value after depreciation
+  lastDepreciationDate  DateTime?           // Last depreciation calculated date
+  
+  // Status & Lifecycle
+  status                AssetStatus         @default(ACTIVE)
+  acquisitionDate       DateTime?           // Date when asset was acquired
+  disposalDate          DateTime?           // Date when asset was disposed
+  disposalValue         Float?              // Value received on disposal
+  disposalReason        String?             // Reason for disposal
+  
+  // Insurance & Warranty
+  insuranceProvider     String?
+  insurancePolicyNo     String?
+  insuranceExpiryDate   DateTime?
+  warrantyProvider      String?
+  warrantyExpiryDate    DateTime?
+  
+  // Maintenance
+  lastMaintenanceDate   DateTime?
+  nextMaintenanceDate   DateTime?
+  maintenanceNotes      String?
+  
+  // Documentation
+  invoiceNumber         String?
+  invoiceDate           DateTime?
+  invoiceUrl            String?             // URL to invoice document
+  imageUrl              String?             // Photo of the asset
+  
+  // Audit Trail
+  createdById           String
+  approvedById          String?
+  approvedAt            DateTime?
+  
+  // Timestamps
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  
+  // Relations
+  company               Company?            @relation(fields: [companyId], references: [id])
+  depreciationLogs      AssetDepreciationLog[]
+  
+  @@unique([companyId, assetCode])
+  @@index([companyId])
+  @@index([assetCode])
+  @@index([assetCategory])
+  @@index([status])
+  @@index([purchaseDate])
+}
+
+// Asset Depreciation Log - Track monthly/yearly depreciation entries
+model AssetDepreciationLog {
+  id                    String              @id @default(cuid())
+  assetId               String
+  
+  // Depreciation Period
+  depreciationDate      DateTime            // Date of depreciation calculation
+  financialYear         String              // e.g., "2024-25"
+  period                String              // e.g., "March 2024"
+  
+  // Amounts
+  openingBookValue      Float               // Book value at start of period
+  depreciationAmount    Float               // Depreciation for this period
+  closingBookValue      Float               // Book value after depreciation
+  
+  // Journal Reference
+  journalEntryId        String?             // Link to journal entry if created
+  
+  // Metadata
+  calculatedAt          DateTime            @default(now())
+  calculatedById        String
+  
+  // Relation
+  asset                 FixedAsset          @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  
+  @@index([assetId])
+  @@index([depreciationDate])
+  @@index([financialYear])
+}
+
+// Asset Category Enum
+enum AssetCategory {
+  FURNITURE_FIXTURES       // Tables, chairs, cabinets
+  OFFICE_EQUIPMENT         // Computers, printers, scanners
+  VEHICLES                 // Cars, bikes, trucks
+  MACHINERY_PLANT          // Manufacturing equipment
+  BUILDINGS                // Office buildings, warehouses
+  LAND                     // Land assets
+  ELECTRONICS              // Laptops, phones, tablets
+  ELECTRICAL_INSTALLATIONS // ACs, generators, electrical fittings
+  INTANGIBLE_ASSETS        // Software licenses, patents
+  OTHER                    // Any other fixed assets
+}
+
+// Depreciation Method Enum
+enum DepreciationMethod {
+  STRAIGHT_LINE            // Equal depreciation each year
+  DIMINISHING_BALANCE      // Reducing balance method
+  WRITTEN_DOWN_VALUE       // WDV method (common in India)
+  UNITS_OF_PRODUCTION      // Based on usage
+}
+
+// Asset Status Enum
+enum AssetStatus {
+  ACTIVE                   // Currently in use
+  UNDER_MAINTENANCE        // Being repaired/maintained
+  DISPOSED                 // Sold or scrapped
+  WRITTEN_OFF              // Fully depreciated or lost
+  SOLD                     // Sold to another party
+  IDLE                     // Not in use but not disposed
+}
