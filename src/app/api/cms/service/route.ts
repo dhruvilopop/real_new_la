@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { cache, CACHE_KEYS } from '@/lib/cache';
+import { cache, CacheKeys } from '@/lib/cache';
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
     if (type === 'all') {
       // Use cache for landing page data (30 seconds)
       const [services, banners, testimonials, loanStats, customerCount, companyCount] = await Promise.all([
-        cache.getOrSet(CACHE_KEYS.CMS_SERVICES, () => 
+        cache.getOrSet(CacheKeys.CMS_SERVICES, () => 
           db.cMSService.findMany({ 
             where: { isActive: true }, 
             orderBy: { order: 'asc' },
@@ -33,30 +33,30 @@ export async function GET(request: NextRequest) {
             }
           }),
         30000),
-        cache.getOrSet(CACHE_KEYS.CMS_BANNERS, () =>
+        cache.getOrSet(CacheKeys.CMS_BANNERS, () =>
           db.cMSBanner.findMany({ 
             where: { isActive: true }, 
             orderBy: { order: 'asc' },
             select: { id: true, title: true, subtitle: true, imageUrl: true, linkUrl: true, buttonText: true }
           }),
         30000),
-        cache.getOrSet(CACHE_KEYS.CMS_TESTIMONIALS, () =>
+        cache.getOrSet(CacheKeys.CMS_TESTIMONIALS, () =>
           db.cMSTestimonial.findMany({ 
             where: { isActive: true }, 
             orderBy: { order: 'asc' },
             select: { id: true, customerName: true, designation: true, content: true, rating: true, imageUrl: true }
           }),
         30000),
-        cache.getOrSet(CACHE_KEYS.LOAN_STATS, () =>
+        cache.getOrSet(CacheKeys.LOAN_STATS, () =>
           db.loanApplication.aggregate({
             _count: { id: true },
             _sum: { requestedAmount: true }
           }),
         30000),
-        cache.getOrSet(CACHE_KEYS.USER_COUNT, () =>
+        cache.getOrSet(CacheKeys.USER_COUNT, () =>
           db.user.count({ where: { role: 'CUSTOMER' } }),
         30000),
-        cache.getOrSet(CACHE_KEYS.COMPANY_COUNT, () =>
+        cache.getOrSet(CacheKeys.COMPANY_COUNT, () =>
           db.company.count(),
         30000)
       ]);
@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Clear cache
-    cache.delete(CACHE_KEYS.CMS_SERVICES);
+    cache.delete(CacheKeys.CMS_SERVICES);
 
     return NextResponse.json({ success: true, service });
   } catch (error) {
@@ -130,7 +130,7 @@ export async function PUT(request: NextRequest) {
     });
 
     // Clear cache
-    cache.delete(CACHE_KEYS.CMS_SERVICES);
+    cache.delete(CacheKeys.CMS_SERVICES);
 
     return NextResponse.json({ success: true, service });
   } catch (error) {
@@ -150,7 +150,7 @@ export async function DELETE(request: NextRequest) {
     await db.cMSService.delete({ where: { id } });
 
     // Clear cache
-    cache.delete(CACHE_KEYS.CMS_SERVICES);
+    cache.delete(CacheKeys.CMS_SERVICES);
 
     return NextResponse.json({ success: true });
   } catch (error) {

@@ -143,6 +143,14 @@ export const CacheKeys = {
   
   // Dashboard stats
   dashboardStats: (role: string, userId?: string) => `dashboard:stats:${role}${userId ? `:${userId}` : ''}`,
+  
+  // CMS related (static keys)
+  CMS_SERVICES: 'cms:services',
+  CMS_BANNERS: 'cms:banners',
+  CMS_TESTIMONIALS: 'cms:testimonials',
+  LOAN_STATS: 'stats:loans',
+  USER_COUNT: 'stats:user_count',
+  COMPANY_COUNT: 'stats:company_count',
 };
 
 // Default TTL values (in milliseconds)

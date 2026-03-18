@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { cache, CACHE_KEYS } from '@/lib/cache';
+import { cache, CacheKeys } from '@/lib/cache';
 
 // GET - List all products or get single product (CACHED)
 export async function GET(request: NextRequest) {
@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     // Cache active products for 30 seconds
     if (isActive === 'true') {
       const products = await cache.getOrSet(
-        CACHE_KEYS.CMS_SERVICES,
+        CacheKeys.CMS_SERVICES,
         () => db.cMSService.findMany({
           where: { isActive: true },
           orderBy: { order: 'asc' },
@@ -114,7 +114,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Clear cache
-    cache.delete(CACHE_KEYS.CMS_SERVICES);
+    cache.delete(CacheKeys.CMS_SERVICES);
 
     return NextResponse.json({ success: true, product });
   } catch (error) {
@@ -163,7 +163,7 @@ export async function PUT(request: NextRequest) {
     });
 
     // Clear cache
-    cache.delete(CACHE_KEYS.CMS_SERVICES);
+    cache.delete(CacheKeys.CMS_SERVICES);
 
     return NextResponse.json({ success: true, product });
   } catch (error) {
@@ -186,7 +186,7 @@ export async function DELETE(request: NextRequest) {
     });
 
     // Clear cache
-    cache.delete(CACHE_KEYS.CMS_SERVICES);
+    cache.delete(CacheKeys.CMS_SERVICES);
 
     return NextResponse.json({ success: true, message: 'Product deleted successfully' });
   } catch (error) {
