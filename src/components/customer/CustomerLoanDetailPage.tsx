@@ -203,28 +203,46 @@ export default function CustomerLoanDetailPage() {
 
   // Submit payment request
   const handleSubmitPayment = async () => {
+    console.log('handleSubmitPayment called', {
+      selectedEmi: selectedEmi?.id,
+      user: user?.id,
+      loanId,
+      selectedPaymentType,
+      partialAmount,
+      nextPaymentDate,
+      utrNumber,
+      proofFile: proofFile?.name,
+      proofPreview: proofPreview ? 'exists' : null
+    });
+
     if (!selectedEmi || !user || !loanId) {
+      console.log('Missing required info:', { selectedEmi, user, loanId });
       toast({ title: 'Error', description: 'Missing required information', variant: 'destructive' });
       return;
     }
 
     // Validate based on payment type
     if (selectedPaymentType === 'PARTIAL') {
+      console.log('Validating PARTIAL payment');
       if (!partialAmount || parseFloat(partialAmount) <= 0) {
+        console.log('Invalid partial amount:', partialAmount);
         toast({ title: 'Error', description: 'Please enter a valid partial amount', variant: 'destructive' });
         return;
       }
       if (parseFloat(partialAmount) >= selectedEmi.totalAmount) {
+        console.log('Partial amount >= total:', partialAmount, selectedEmi.totalAmount);
         toast({ title: 'Error', description: 'Partial amount must be less than total EMI', variant: 'destructive' });
         return;
       }
       if (!nextPaymentDate) {
+        console.log('Missing nextPaymentDate');
         toast({ title: 'Error', description: 'Please select a date for remaining payment', variant: 'destructive' });
         return;
       }
       // Validate date is after original due date
       const newDate = new Date(nextPaymentDate);
       const dueDate = new Date(selectedEmi.dueDate);
+      console.log('Date validation:', { newDate, dueDate, isValid: newDate > dueDate });
       if (newDate <= dueDate) {
         toast({ title: 'Error', description: 'New date must be after the original due date', variant: 'destructive' });
         return;
@@ -232,14 +250,18 @@ export default function CustomerLoanDetailPage() {
     }
 
     if (!utrNumber) {
+      console.log('Missing UTR number');
       toast({ title: 'Error', description: 'Please enter UTR/Reference number', variant: 'destructive' });
       return;
     }
 
     if (!proofFile && !proofPreview) {
+      console.log('Missing proof file');
       toast({ title: 'Error', description: 'Please upload payment proof screenshot', variant: 'destructive' });
       return;
     }
+
+    console.log('All validations passed, submitting...');
 
     setPaymentLoading(true);
     try {
