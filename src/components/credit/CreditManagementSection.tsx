@@ -97,8 +97,8 @@ export default function CreditManagementSection() {
 
   useEffect(() => {
     fetchData();
-    // Set up real-time refresh every 5 seconds
-    const interval = setInterval(fetchData, 5000);
+    // Set up real-time refresh every 2 minutes (reduced to prevent DB connection limit issues)
+    const interval = setInterval(fetchData, 120000);
     return () => clearInterval(interval);
   }, []);
 

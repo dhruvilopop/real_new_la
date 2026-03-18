@@ -244,12 +244,12 @@ export default function CreditManagementPage() {
     }
   }, [fetchData]);
 
-  // Auto-refresh polling every 1 second
+  // Auto-refresh polling every 30 seconds (reduced to prevent DB connection limit issues)
   useEffect(() => {
     if (autoRefresh) {
       intervalRef.current = setInterval(() => {
         fetchData(true);
-      }, 1000); // Refresh every 1 second
+      }, 30000); // Refresh every 30 seconds (reduced from 1 second)
       
       return () => {
         if (intervalRef.current) {
