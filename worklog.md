@@ -71,3 +71,51 @@ Stage Summary:
 - All changes committed and pushed to git (commit 3a25c29)
 
 ---
+Task ID: 3
+Agent: Main Agent
+Task: Fix TypeScript Errors and Integrate Company Bank Account with Payment System
+
+Work Log:
+- Fixed TypeScript error in ActiveLoansSection.tsx: Added `id` field to company type
+- Fixed TypeScript error in CustomerLoanDetailPage.tsx: Added `loanApplicationId` to EMISchedule interface
+- Fixed TypeScript error in CustomerLoanDetailPage.tsx: Fixed `proofUrl` type annotation (string | null)
+- Fixed TypeScript error in EMISettingsDialog.tsx: Made `emi` prop nullable
+- Fixed TypeScript error in EMISettingsDialog.tsx: Made `loanApplicationId` optional
+- Fixed TypeScript error in EMISettingsDialog.tsx: Added null check for formatDate call
+- Updated /api/payment-request/route.ts to fetch company's default bank account details:
+  - Added automatic companyId lookup from loanApplicationId
+  - Fetches default bank account (isDefault: true) for the company
+  - Returns bankAccountId, bankName, bankAccountNumber, bankIfscCode, bankBranch, companyUpiId, companyQrCodeUrl
+  - Merged bank account details with payment settings response
+- Updated AccountantDashboard.tsx:
+  - Added `branchName` field to newBankData state and resetBankForm
+  - Added Branch Name input field in bank account creation form
+  - Updated BankAccount interface with: ifscCode, branchName, upiId, qrCodeUrl
+  - Enhanced bank account detail dialog to show IFSC Code, Branch Name, UPI ID, QR Code image
+  - Added "Default Account" badge styling for default accounts
+- Fixed TypeScript error in payment-request/route.ts: Added proper type annotation for bankAccountDetails variable
+
+Stage Summary:
+- All TypeScript errors resolved - build passes successfully
+- Customer payment page now receives company's default bank account details
+- Accountant can configure: Bank Name, Account Number, IFSC Code, Branch Name, UPI ID, QR Code URL
+- Default bank account is automatically shown to customers for EMI payments
+- Git commits pushed:
+  - 3defd35: fix: resolve TypeScript type errors
+  - e096488: feat: integrate company bank account with payment settings
+  - f9d4d03: fix: resolve TypeScript type error in payment-request API
+
+Key Files Modified:
+1. /src/app/api/payment-request/route.ts - Added bank account details to settings response
+2. /src/components/accountant/AccountantDashboard.tsx - Enhanced bank account management
+3. /src/components/customer/CustomerLoanDetailPage.tsx - Fixed type errors
+4. /src/components/customer/EMISettingsDialog.tsx - Fixed type errors
+5. /src/components/admin/modules/ActiveLoansSection.tsx - Fixed type errors
+
+How the Payment Flow Works Now:
+1. Accountant creates a bank account with UPI ID, QR Code URL, marks it as Default
+2. Customer views their loan and clicks "Pay EMI"
+3. Payment dialog shows company's default bank account details (UPI ID, QR Code, Bank Name, Account Number, IFSC)
+4. Customer can scan QR or use UPI ID to make payment
+
+---
