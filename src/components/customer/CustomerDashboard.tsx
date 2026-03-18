@@ -491,8 +491,9 @@ export default function CustomerDashboard() {
     if (!selectedLoan || !user) return;
     setLoading(true);
     try {
-      const paidSchedules = emiSchedules.filter(e => e.paymentStatus === 'PAID');
-      const pendingSchedules = emiSchedules.filter(e => e.paymentStatus !== 'PAID');
+      // INTEREST_ONLY_PAID is considered as paid - interest is paid and new EMI created for principal
+      const paidSchedules = emiSchedules.filter(e => e.paymentStatus === 'PAID' || e.paymentStatus === 'INTEREST_ONLY_PAID');
+      const pendingSchedules = emiSchedules.filter(e => e.paymentStatus !== 'PAID' && e.paymentStatus !== 'INTEREST_ONLY_PAID');
       const outstandingPrincipal = pendingSchedules.reduce((sum, e) => sum + e.principalAmount, 0);
       const pendingInterest = pendingSchedules.reduce((sum, e) => sum + e.interestAmount, 0);
       
@@ -631,7 +632,8 @@ export default function CustomerDashboard() {
 
   // Calculate totals
   const totalActiveLoan = activeLoans.reduce((sum, l) => sum + (l.sessionForm?.approvedAmount || l.requestedAmount), 0);
-  const totalEMIPaid = emiSchedules.filter(e => e.paymentStatus === 'PAID').reduce((sum, e) => sum + e.paidAmount, 0);
+  // INTEREST_ONLY_PAID is considered as paid
+  const totalEMIPaid = emiSchedules.filter(e => e.paymentStatus === 'PAID' || e.paymentStatus === 'INTEREST_ONLY_PAID').reduce((sum, e) => sum + e.paidAmount, 0);
   const nextEMI = emiSchedules.find(e => e.paymentStatus === 'PENDING');
   const overdueEMIs = emiSchedules.filter(e => e.paymentStatus === 'OVERDUE');
 
@@ -1216,7 +1218,7 @@ export default function CustomerDashboard() {
                   <div className="grid grid-cols-3 gap-2 mb-4 text-center">
                     <div className="bg-green-50 p-2 rounded-lg">
                       <p className="text-xs text-gray-500">Paid</p>
-                      <p className="font-semibold text-green-700">{emiSchedules.filter(e => e.paymentStatus === 'PAID').length}</p>
+                      <p className="font-semibold text-green-700">{emiSchedules.filter(e => e.paymentStatus === 'PAID' || e.paymentStatus === 'INTEREST_ONLY_PAID').length}</p>
                     </div>
                     <div className="bg-yellow-50 p-2 rounded-lg">
                       <p className="text-xs text-gray-500">Pending</p>
@@ -1246,7 +1248,7 @@ export default function CustomerDashboard() {
                   <ScrollArea className="h-[300px]">
                     <div className="space-y-2">
                       {emiSchedules.map((emi) => (
-                        <div key={emi.id} className={`p-3 rounded-lg border ${emi.paymentStatus === 'OVERDUE' ? 'border-red-200 bg-red-50' : emi.paymentStatus === 'PAID' ? 'border-green-200 bg-green-50' : 'border-gray-200'}`}>
+                        <div key={emi.id} className={`p-3 rounded-lg border ${emi.paymentStatus === 'OVERDUE' ? 'border-red-200 bg-red-50' : (emi.paymentStatus === 'PAID' || emi.paymentStatus === 'INTEREST_ONLY_PAID') ? 'border-green-200 bg-green-50' : 'border-gray-200'}`}>
                           <div className="flex justify-between items-center">
                             <div>
                               <p className="font-medium text-sm">EMI #{emi.installmentNumber}</p>
@@ -1493,11 +1495,11 @@ export default function CustomerDashboard() {
               <div className="p-4 bg-gray-50 rounded-lg">
                 <div className="flex justify-between mb-2">
                   <span>Outstanding Principal</span>
-                  <span>{formatCurrency(emiSchedules.filter(e => e.paymentStatus !== 'PAID').reduce((s, e) => s + e.principalAmount, 0))}</span>
+                  <span>{formatCurrency(emiSchedules.filter(e => e.paymentStatus !== 'PAID' && e.paymentStatus !== 'INTEREST_ONLY_PAID').reduce((s, e) => s + e.principalAmount, 0))}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Pending Interest</span>
-                  <span>{formatCurrency(emiSchedules.filter(e => e.paymentStatus !== 'PAID').reduce((s, e) => s + e.interestAmount, 0))}</span>
+                  <span>{formatCurrency(emiSchedules.filter(e => e.paymentStatus !== 'PAID' && e.paymentStatus !== 'INTEREST_ONLY_PAID').reduce((s, e) => s + e.interestAmount, 0))}</span>
                 </div>
               </div>
             </div>

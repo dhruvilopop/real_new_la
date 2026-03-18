@@ -352,8 +352,12 @@ export default function CustomerLoanDetailPage() {
   };
 
   // Calculate stats
-  const paidEmis = emiSchedules.filter(e => e.paymentStatus === 'PAID');
-  const pendingEmis = emiSchedules.filter(e => e.paymentStatus === 'PENDING' || e.paymentStatus === 'PARTIALLY_PAID');
+  const paidEmis = emiSchedules.filter(e => e.paymentStatus === 'PAID' || e.paymentStatus === 'INTEREST_ONLY_PAID');
+  const pendingEmis = emiSchedules.filter(e => 
+    e.paymentStatus === 'PENDING' || 
+    e.paymentStatus === 'PARTIALLY_PAID' ||
+    e.paymentStatus === 'OVERDUE'
+  );
   const overdueEmis = emiSchedules.filter(e => e.paymentStatus === 'OVERDUE');
   const progress = emiSchedules.length > 0 ? (paidEmis.length / emiSchedules.length) * 100 : 0;
   const totalPaid = paidEmis.reduce((sum, e) => sum + e.paidAmount, 0);
@@ -361,10 +365,16 @@ export default function CustomerLoanDetailPage() {
 
   // Sequential EMI Payment - Check if this EMI can be paid
   const canPayEmi = (emi: EMISchedule) => {
-    if (emi.paymentStatus === 'PAID') return { canPay: false, reason: 'Already paid' };
+    // INTEREST_ONLY_PAID means the interest is paid and a new EMI was created for principal
+    if (emi.paymentStatus === 'PAID' || emi.paymentStatus === 'INTEREST_ONLY_PAID') {
+      return { canPay: false, reason: 'Already paid' };
+    }
     
     const sortedEmis = [...emiSchedules].sort((a, b) => a.installmentNumber - b.installmentNumber);
-    const firstUnpaidEmi = sortedEmis.find(e => e.paymentStatus !== 'PAID');
+    // Find first unpaid EMI (excluding INTEREST_ONLY_PAID as they are considered paid)
+    const firstUnpaidEmi = sortedEmis.find(e => 
+      e.paymentStatus !== 'PAID' && e.paymentStatus !== 'INTEREST_ONLY_PAID'
+    );
     
     if (firstUnpaidEmi && firstUnpaidEmi.id === emi.id) {
       return { canPay: true, reason: '' };
@@ -382,7 +392,10 @@ export default function CustomerLoanDetailPage() {
 
   const getFirstUnpaidEmi = () => {
     const sortedEmis = [...emiSchedules].sort((a, b) => a.installmentNumber - b.installmentNumber);
-    return sortedEmis.find(e => e.paymentStatus !== 'PAID');
+    // Find first unpaid EMI (excluding INTEREST_ONLY_PAID as they are considered paid)
+    return sortedEmis.find(e => 
+      e.paymentStatus !== 'PAID' && e.paymentStatus !== 'INTEREST_ONLY_PAID'
+    );
   };
 
   // Get min date for partial payment (must be after due date)
@@ -599,7 +612,9 @@ export default function CustomerLoanDetailPage() {
             <ScrollArea className="h-[400px]">
               <div className="divide-y">
                 {emiSchedules.sort((a, b) => a.installmentNumber - b.installmentNumber).map((emi, index) => {
-                  const isPaid = emi.paymentStatus === 'PAID';
+                  // INTEREST_ONLY_PAID is considered as paid - interest is paid and new EMI created for principal
+                  const isPaid = emi.paymentStatus === 'PAID' || emi.paymentStatus === 'INTEREST_ONLY_PAID';
+                  const isFullyPaid = emi.paymentStatus === 'PAID';
                   const isOverdue = emi.paymentStatus === 'OVERDUE';
                   const isPartial = emi.paymentStatus === 'PARTIALLY_PAID';
                   const isInterestPaid = emi.paymentStatus === 'INTEREST_ONLY_PAID';
@@ -630,10 +645,12 @@ export default function CustomerLoanDetailPage() {
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
                           <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
-                            isPaid ? 'bg-emerald-100' : isOverdue ? 'bg-red-100' : isInterestPaid ? 'bg-purple-100' : isNextToPay ? 'bg-amber-100 ring-2 ring-amber-400' : 'bg-gray-100'
+                            isFullyPaid ? 'bg-emerald-100' : isInterestPaid ? 'bg-purple-100' : isOverdue ? 'bg-red-100' : isNextToPay ? 'bg-amber-100 ring-2 ring-amber-400' : 'bg-gray-100'
                           }`}>
-                            {isPaid ? (
+                            {isFullyPaid ? (
                               <CheckCircle className="h-6 w-6 text-emerald-600" />
+                            ) : isInterestPaid ? (
+                              <CheckCircle className="h-6 w-6 text-purple-600" />
                             ) : isOverdue ? (
                               <AlertTriangle className="h-6 w-6 text-red-600" />
                             ) : (
