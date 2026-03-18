@@ -1,9 +1,11 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import DashboardLayout, { ROLE_MENU_ITEMS } from '@/components/layout/DashboardLayout';
 import FixedAssetsPage from './FixedAssetsPage';
+import CompanySelector from './CompanySelector';
+import ExcelExportSection from './ExcelExportSection';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,7 +23,8 @@ import {
   Calculator, FileText, TrendingUp, TrendingDown, Wallet, Building2, 
   Receipt, PieChart, Calendar, Users, CreditCard, AlertTriangle,
   Plus, Eye, Download, ChevronRight, BookOpen, RefreshCw, Trash2,
-  Landmark, FileSpreadsheet, ClipboardList, DollarSign, Sparkles, Loader2
+  Landmark, FileSpreadsheet, ClipboardList, DollarSign, Sparkles, Loader2,
+  Activity, Zap, Shield, LogOut
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -147,6 +150,19 @@ export default function AccountantDashboard() {
   const [activeSection, setActiveSection] = useState('overview');
   const [loading, setLoading] = useState(true);
   
+  // Company Selection State
+  const [selectedCompanyIds, setSelectedCompanyIds] = useState<string[]>([]);
+  const [selectedBankAccountId, setSelectedBankAccountId] = useState<string>('');
+  
+  // Real-time Updates State
+  const [lastUpdate, setLastUpdate] = useState(Date.now());
+  const [isRealTimeEnabled, setIsRealTimeEnabled] = useState(true);
+  const realTimeIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Activity Tracking State
+  const [lastActivity, setLastActivity] = useState(Date.now());
+  const [showSessionWarning, setShowSessionWarning] = useState(false);
+  
   // Data states
   const [accounts, setAccounts] = useState<ChartOfAccount[]>([]);
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
@@ -235,13 +251,49 @@ export default function AccountantDashboard() {
     fetchDashboardData();
   }, []);
 
+  // Real-time updates effect
+  useEffect(() => {
+    if (isRealTimeEnabled) {
+      realTimeIntervalRef.current = setInterval(() => {
+        setLastUpdate(Date.now());
+        // Dispatch event for components to refresh
+        window.dispatchEvent(new CustomEvent('accountantDataRefresh'));
+      }, 30000); // Every 30 seconds
+    }
+    
+    return () => {
+      if (realTimeIntervalRef.current) {
+        clearInterval(realTimeIntervalRef.current);
+      }
+    };
+  }, [isRealTimeEnabled]);
+  
+  // Activity tracking effect
+  useEffect(() => {
+    const trackActivity = () => setLastActivity(Date.now());
+    const events = ['mousedown', 'keypress', 'scroll', 'touchstart'];
+    
+    events.forEach(event => {
+      document.addEventListener(event, trackActivity, { passive: true });
+    });
+    
+    return () => {
+      events.forEach(event => {
+        document.removeEventListener(event, trackActivity);
+      });
+    };
+  }, []);
+
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
-      const companyId = user?.companyId || 'default';
+      // Use selected company IDs if available, otherwise use user's company
+      const companyFilter = selectedCompanyIds.length > 0 
+        ? selectedCompanyIds.join(',') 
+        : (user?.companyId || 'default');
 
       // Fetch money management data (comprehensive)
-      const moneyMgmtRes = await fetch(`/api/accounting/money-management?companyId=${companyId}`);
+      const moneyMgmtRes = await fetch(`/api/accounting/money-management?companyId=${companyFilter}`);
       if (moneyMgmtRes.ok) {
         const moneyData = await moneyMgmtRes.json();
         
@@ -613,6 +665,11 @@ export default function AccountantDashboard() {
     switch (activeSection) {
       case 'overview':
         return renderOverview();
+      case 'excel-export':
+        return <ExcelExportSection 
+          selectedCompanyIds={selectedCompanyIds}
+          onCompanyChange={setSelectedCompanyIds}
+        />;
       case 'loans':
         return renderActiveLoans();
       case 'money-logs':
@@ -2118,6 +2175,22 @@ export default function AccountantDashboard() {
       stats={stats}
       gradient="bg-gradient-to-br from-teal-500 to-emerald-600"
       logoIcon={Calculator}
+      headerRight={
+        <div className="flex items-center gap-3">
+          <CompanySelector
+            selectedCompanyIds={selectedCompanyIds}
+            onSelectionChange={setSelectedCompanyIds}
+            selectedBankAccountId={selectedBankAccountId}
+            onBankAccountChange={setSelectedBankAccountId}
+          />
+          <div className="flex items-center gap-1 px-2 py-1 bg-gray-100 rounded-lg">
+            <Activity className={`h-4 w-4 ${isRealTimeEnabled ? 'text-green-500' : 'text-gray-400'}`} />
+            <span className="text-xs text-gray-600">
+              {isRealTimeEnabled ? 'Live' : 'Paused'}
+            </span>
+          </div>
+        </div>
+      }
     >
       <AnimatePresence mode="wait">
         {loading ? (

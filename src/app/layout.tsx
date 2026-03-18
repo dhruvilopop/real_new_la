@@ -3,6 +3,7 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { SettingsProvider } from "@/contexts/SettingsContext";
+import { SecurityProvider } from "@/contexts/SecurityContext";
 
 export const metadata: Metadata = {
   title: "Money Mitra Financial Advisor",
@@ -17,7 +18,9 @@ export default function RootLayout({
       <body>
         <AuthProvider>
           <SettingsProvider>
-            {children}
+            <SecurityProvider>
+              {children}
+            </SecurityProvider>
           </SettingsProvider>
         </AuthProvider>
         <Toaster position="top-right" richColors closeButton />

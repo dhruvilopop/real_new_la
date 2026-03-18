@@ -264,10 +264,10 @@ export default function CashierDashboard() {
   const totalDisbursedAll = allDisbursed.reduce((sum, l) => sum + (l.disbursedAmount || l.sessionForm?.approvedAmount || 0), 0);
 
   const stats = [
-    { label: 'Ready for Disbursement', value: readyForDisbursement.length, icon: CreditCard, color: 'text-green-600', bg: 'bg-green-50' },
+    { label: 'Ready for Disbursement', value: readyForDisbursement.length, icon: CreditCard, color: 'text-green-600', bg: 'bg-green-50', onClick: () => setActiveTab('pending') },
     { label: 'Today\'s Disbursement', value: formatCurrency(totalDisbursedToday), icon: DollarSign, color: 'text-blue-600', bg: 'bg-blue-50' },
     { label: 'Daily Limit', value: formatCurrency(remainingLimit), icon: Banknote, color: 'text-purple-600', bg: 'bg-purple-50' },
-    { label: 'Total Disbursed', value: formatCurrency(totalDisbursedAll), icon: TrendingUp, color: 'text-emerald-600', bg: 'bg-emerald-50' }
+    { label: 'Total Disbursed', value: formatCurrency(totalDisbursedAll), icon: TrendingUp, color: 'text-emerald-600', bg: 'bg-emerald-50', onClick: () => setActiveTab('history') }
   ];
 
   const menuItems = ROLE_MENU_ITEMS.CASHIER.map(item => ({
@@ -482,25 +482,6 @@ export default function CashierDashboard() {
       default:
         return (
           <div className="space-y-6">
-            {/* Stats */}
-            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {stats.map((stat) => (
-                <Card key={stat.label} className="border-0 shadow-sm">
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm text-gray-500">{stat.label}</p>
-                        <p className="text-2xl font-bold">{stat.value}</p>
-                      </div>
-                      <div className={`w-12 h-12 ${stat.bg} rounded-xl flex items-center justify-center`}>
-                        <stat.icon className={`h-6 w-6 ${stat.color}`} />
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-
             {/* Bank Balance Summary */}
             {bankAccounts.length > 0 && (
               <Card className="border-0 shadow-sm">

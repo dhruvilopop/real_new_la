@@ -479,10 +479,10 @@ export default function StaffDashboard() {
   const inProgressLoans = loans.filter(l => ['SESSION_CREATED', 'CUSTOMER_SESSION_APPROVED', 'FINAL_APPROVED', 'ACTIVE'].includes(l.status));
 
   const stats = [
-    { label: 'Pending Forms', value: pendingLoans.length, icon: FileEdit, color: 'text-orange-600', bg: 'bg-orange-50' },
-    { label: 'Completed', value: completedLoans.length, icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-50' },
-    { label: 'In Progress', value: inProgressLoans.length, icon: Clock, color: 'text-blue-600', bg: 'bg-blue-50' },
-    { label: 'Active Loans', value: activeLoans.length, icon: Banknote, color: 'text-emerald-600', bg: 'bg-emerald-50' }
+    { label: 'Pending Forms', value: pendingLoans.length, icon: FileEdit, color: 'text-orange-600', bg: 'bg-orange-50', onClick: () => setActiveTab('pending') },
+    { label: 'Completed', value: completedLoans.length, icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-50', onClick: () => setActiveTab('completed') },
+    { label: 'In Progress', value: inProgressLoans.length, icon: Clock, color: 'text-blue-600', bg: 'bg-blue-50', onClick: () => setActiveTab('activeLoans') },
+    { label: 'Active Loans', value: activeLoans.length, icon: Banknote, color: 'text-emerald-600', bg: 'bg-emerald-50', onClick: () => setActiveTab('activeLoans') }
   ];
 
   const menuItems = ROLE_MENU_ITEMS.STAFF.map(item => ({
@@ -1580,25 +1580,6 @@ export default function StaffDashboard() {
       default:
         return (
           <div className="space-y-6">
-            {/* Stats */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              {stats.map((stat) => (
-                <Card key={stat.label} className="border-0 shadow-sm">
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm text-gray-500">{stat.label}</p>
-                        <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
-                      </div>
-                      <div className={`w-12 h-12 ${stat.bg} rounded-xl flex items-center justify-center`}>
-                        <stat.icon className={`h-6 w-6 ${stat.color}`} />
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-
             {/* Pending Alert */}
             {pendingLoans.length > 0 && (
               <Card className="border-orange-200 bg-orange-50">

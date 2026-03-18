@@ -273,10 +273,10 @@ export default function CompanyDashboard() {
   const totalPending = pendingForCompany.reduce((sum, l) => sum + l.requestedAmount, 0);
 
   const stats = [
-    { label: 'Pending Approvals', value: pendingForCompany.length, icon: Clock, color: 'text-orange-600', bg: 'bg-orange-50' },
-    { label: 'In Progress', value: inProgressLoans.length, icon: TrendingUp, color: 'text-blue-600', bg: 'bg-blue-50' },
-    { label: 'Active Loans', value: activeLoans.length, icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-50' },
-    { label: 'Total Disbursed', value: formatCurrency(totalDisbursed), icon: DollarSign, color: 'text-emerald-600', bg: 'bg-emerald-50' }
+    { label: 'Pending Approvals', value: pendingForCompany.length, icon: Clock, color: 'text-orange-600', bg: 'bg-orange-50', onClick: () => setActiveTab('pending') },
+    { label: 'In Progress', value: inProgressLoans.length, icon: TrendingUp, color: 'text-blue-600', bg: 'bg-blue-50', onClick: () => setActiveTab('progress') },
+    { label: 'Active Loans', value: activeLoans.length, icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-50', onClick: () => setActiveTab('active') },
+    { label: 'Total Disbursed', value: formatCurrency(totalDisbursed), icon: DollarSign, color: 'text-emerald-600', bg: 'bg-emerald-50', onClick: () => setActiveTab('active') }
   ];
 
   const menuItems = ROLE_MENU_ITEMS.COMPANY.map(item => ({
@@ -969,25 +969,6 @@ export default function CompanyDashboard() {
       default:
         return (
           <div className="space-y-6">
-            {/* Stats */}
-            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {stats.map((stat) => (
-                <Card key={stat.label} className="border-0 shadow-sm">
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm text-gray-500">{stat.label}</p>
-                        <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
-                      </div>
-                      <div className={`w-12 h-12 ${stat.bg} rounded-xl flex items-center justify-center`}>
-                        <stat.icon className={`h-6 w-6 ${stat.color}`} />
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-
             {/* Pipeline */}
             <Card className="border-0 shadow-sm">
               <CardHeader>

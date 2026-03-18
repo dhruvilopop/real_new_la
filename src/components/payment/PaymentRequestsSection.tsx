@@ -13,10 +13,12 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Clock, CheckCircle, XCircle, Eye, Search, Filter, IndianRupee,
   CreditCard, Wallet, Percent, Banknote, FileText, Image as ImageIcon,
-  Calendar, User, Building2, AlertCircle, RefreshCw, MessageSquare
+  Calendar, User, Building2, AlertCircle, RefreshCw, MessageSquare,
+  Settings, Upload, QrCode, Save, Landmark
 } from 'lucide-react';
 import { formatCurrency, formatDate } from '@/utils/helpers';
 import { toast } from '@/hooks/use-toast';
@@ -69,6 +71,16 @@ interface PaymentRequestsSectionProps {
   cashierId: string;
 }
 
+interface PaymentSettings {
+  companyUpiId?: string;
+  companyQrCodeUrl?: string;
+  collectionBankAccountId?: string;
+  bankName?: string;
+  bankAccountNumber?: string;
+  bankIfscCode?: string;
+  bankBranch?: string;
+}
+
 export default function PaymentRequestsSection({ cashierId }: PaymentRequestsSectionProps) {
   const [requests, setRequests] = useState<PaymentRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -77,14 +89,84 @@ export default function PaymentRequestsSection({ cashierId }: PaymentRequestsSec
   const [selectedRequest, setSelectedRequest] = useState<PaymentRequest | null>(null);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
   const [showActionDialog, setShowActionDialog] = useState(false);
+  const [showSettingsDialog, setShowSettingsDialog] = useState(false);
   const [actionType, setActionType] = useState<'approve' | 'reject'>('approve');
   const [reviewRemarks, setReviewRemarks] = useState('');
   const [rejectionReason, setRejectionReason] = useState('');
   const [processing, setProcessing] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [settings, setSettings] = useState<PaymentSettings>({});
+  const [settingsForm, setSettingsForm] = useState({
+    companyUpiId: '',
+    companyQrCodeUrl: '',
+    bankName: '',
+    bankAccountNumber: '',
+    bankIfscCode: '',
+    bankBranch: ''
+  });
 
   useEffect(() => {
     fetchRequests();
   }, [statusFilter]);
+
+  useEffect(() => {
+    fetchSettings();
+  }, []);
+
+  const fetchSettings = async () => {
+    try {
+      const response = await fetch('/api/settings/payment');
+      const data = await response.json();
+      if (data.success) {
+        setSettings(data.settings || {});
+        setSettingsForm({
+          companyUpiId: data.settings?.companyUpiId || '',
+          companyQrCodeUrl: data.settings?.companyQrCodeUrl || '',
+          bankName: data.settings?.bankName || '',
+          bankAccountNumber: data.settings?.bankAccountNumber || '',
+          bankIfscCode: data.settings?.bankIfscCode || '',
+          bankBranch: data.settings?.bankBranch || ''
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching payment settings:', error);
+    }
+  };
+
+  const savePaymentSettings = async () => {
+    setSavingSettings(true);
+    try {
+    const response = await fetch('/api/settings/payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settingsForm)
+      });
+      const data = await response.json();
+      if (data.success) {
+        toast({ 
+          title: 'Settings Saved', 
+          description: 'Payment settings have been updated successfully. Customers will see the new details.' 
+        });
+        setShowSettingsDialog(false);
+        fetchSettings();
+      } else {
+        toast({ 
+          title: 'Error', 
+          description: data.error || 'Failed to save settings', 
+          variant: 'destructive' 
+        });
+      }
+    } catch (error) {
+      console.error('Error saving payment settings:', error);
+      toast({ 
+        title: 'Error', 
+        description: 'Failed to save payment settings', 
+        variant: 'destructive' 
+      });
+    } finally {
+      setSavingSettings(false);
+      }
+  };
 
   const fetchRequests = async () => {
     setLoading(true);
@@ -274,9 +356,44 @@ export default function PaymentRequestsSection({ cashierId }: PaymentRequestsSec
             <Button variant="outline" onClick={fetchRequests}>
               <RefreshCw className="h-4 w-4 mr-2" /> Refresh
             </Button>
+            <Button className="bg-emerald-500 hover:bg-emerald-600" onClick={() => setShowSettingsDialog(true)}>
+              <Settings className="h-4 w-4 mr-2" /> Payment Settings
+            </Button>
           </div>
         </CardContent>
       </Card>
+
+      {/* Settings Preview Card */}
+      {(settings.companyUpiId || settings.bankName) && (
+        <Card className="border-emerald-200 bg-emerald-50">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3 mb-2">
+              <QrCode className="h-5 w-5 text-emerald-600" />
+              <span className="font-medium text-emerald-800">Active Payment Configuration</span>
+            </div>
+            <div className="grid grid-cols-3 gap-4 text-sm">
+              {settings.companyUpiId && (
+                <div className="text-center">
+                  <p className="text-gray-500">UPI ID</p>
+                  <p className="font-mono font-medium">{settings.companyUpiId}</p>
+                </div>
+              )}
+              {settings.companyQrCodeUrl && (
+                <div className="text-center">
+                  <p className="text-gray-500">QR Code</p>
+                  <p className="font-medium text-emerald-600">✓ Uploaded</p>
+                </div>
+              )}
+              {settings.bankName && (
+                <div className="text-center">
+                  <p className="text-gray-500">Bank</p>
+                  <p className="font-medium">{settings.bankName}</p>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Requests List */}
       <Card className="border-0 shadow-sm">
@@ -671,6 +788,161 @@ export default function PaymentRequestsSection({ cashierId }: PaymentRequestsSec
               {processing ? 'Processing...' : actionType === 'approve' ? 'Confirm Approval' : 'Confirm Rejection'}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Settings Dialog */}
+      <Dialog open={showSettingsDialog} onOpenChange={setShowSettingsDialog}>
+        <DialogContent className="max-w-2xl max-h-[95vh] p-0">
+          <div className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white p-6">
+            <DialogHeader>
+              <DialogTitle className="text-xl flex items-center gap-2 text-white">
+                <Settings className="h-6 w-6" /> Payment Settings
+              </DialogTitle>
+              <DialogDescription className="text-emerald-100">
+                Configure QR code, UPI ID, and bank details for customer payments
+              </DialogDescription>
+            </DialogHeader>
+          </div>
+
+          <ScrollArea className="max-h-[calc(95vh-120px)]">
+            <div className="p-6 space-y-6">
+              <Tabs defaultValue="upi" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="upi" className="flex items-center gap-2">
+                    <QrCode className="h-4 w-4" /> UPI / QR Code
+                  </TabsTrigger>
+                  <TabsTrigger value="bank" className="flex items-center gap-2">
+                    <Landmark className="h-4 w-4" /> Bank Details
+                  </TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="upi" className="space-y-4 mt-4">
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm text-gray-500">UPI Configuration</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div>
+                        <Label htmlFor="companyUpiId">UPI ID</Label>
+                        <Input
+                          id="companyUpiId"
+                          value={settingsForm.companyUpiId}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, companyUpiId: e.target.value })}
+                          placeholder="example@upi"
+                          className="mt-1"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">Customers will see this UPI ID for payments</p>
+                      </div>
+                      <div>
+                        <Label htmlFor="companyQrCodeUrl">QR Code Image URL</Label>
+                        <Input
+                          id="companyQrCodeUrl"
+                          value={settingsForm.companyQrCodeUrl}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, companyQrCodeUrl: e.target.value })}
+                          placeholder="https://example.com/qr-code.png"
+                          className="mt-1"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">URL to your QR code image</p>
+                      </div>
+                      {settingsForm.companyQrCodeUrl && (
+                        <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                          <p className="text-sm text-gray-500 mb-2">QR Code Preview:</p>
+                          <img 
+                            src={settingsForm.companyQrCodeUrl} 
+                            alt="QR Code Preview" 
+                            className="max-h-40 rounded-lg border"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = 'https://via.placeholder.com/150?text=Invalid+URL';
+                            }}
+                          />
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                <TabsContent value="bank" className="space-y-4 mt-4">
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm text-gray-500">Bank Account Details</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="bankName">Bank Name</Label>
+                          <Input
+                            id="bankName"
+                            value={settingsForm.bankName}
+                            onChange={(e) => setSettingsForm({ ...settingsForm, bankName: e.target.value })}
+                            placeholder="State Bank of India"
+                            className="mt-1"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="bankBranch">Branch</Label>
+                          <Input
+                            id="bankBranch"
+                            value={settingsForm.bankBranch}
+                            onChange={(e) => setSettingsForm({ ...settingsForm, bankBranch: e.target.value })}
+                            placeholder="Main Branch"
+                            className="mt-1"
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="bankAccountNumber">Account Number</Label>
+                          <Input
+                            id="bankAccountNumber"
+                            value={settingsForm.bankAccountNumber}
+                            onChange={(e) => setSettingsForm({ ...settingsForm, bankAccountNumber: e.target.value })}
+                            placeholder="1234567890123456"
+                            className="mt-1"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="bankIfscCode">IFSC Code</Label>
+                          <Input
+                            id="bankIfscCode"
+                            value={settingsForm.bankIfscCode}
+                            onChange={(e) => setSettingsForm({ ...settingsForm, bankIfscCode: e.target.value.toUpperCase() })}
+                            placeholder="SBIN0001234"
+                            className="mt-1"
+                            maxLength={11}
+                          />
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+              </Tabs>
+
+              <Alert className="bg-blue-50 border-blue-200">
+                <AlertCircle className="h-4 w-4 text-blue-600" />
+                <AlertDescription className="text-blue-700">
+                  Changes will be immediately visible to customers on the payment page. Make sure the details are correct.
+                </AlertDescription>
+              </Alert>
+            </div>
+          </ScrollArea>
+
+          <div className="p-4 border-t flex justify-end gap-3">
+            <Button variant="outline" onClick={() => setShowSettingsDialog(false)}>
+              Cancel
+            </Button>
+            <Button 
+              className="bg-emerald-500 hover:bg-emerald-600"
+              onClick={savePaymentSettings}
+              disabled={savingSettings}
+            >
+              {savingSettings ? (
+                <>Saving...</>
+              ) : (
+                <><Save className="h-4 w-4 mr-2" /> Save Settings</>
+              )}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

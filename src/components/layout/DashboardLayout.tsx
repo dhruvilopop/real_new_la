@@ -26,7 +26,7 @@ interface DashboardLayoutProps {
   menuItems?: MenuItem[];
   activeTab?: string;
   onTabChange?: (tab: string) => void;
-  stats?: { label: string; value: string | number; icon: React.ElementType; color: string }[];
+  stats?: { label: string; value: string | number; icon: React.ElementType; color: string; onClick?: () => void; clickable?: boolean }[];
   gradient?: string;
   logoIcon?: React.ElementType;
   headerRight?: ReactNode;
@@ -114,12 +114,12 @@ export default function DashboardLayout({
       fetchUserCredit();
     }
     
-    // Auto-refresh every 1 second
+    // Auto-refresh every 30 seconds (reduced from 1 second to prevent DB connection limit issues)
     const interval = setInterval(() => {
       if (user?.id && user.role !== 'CUSTOMER') {
         fetchUserCredit();
       }
-    }, 1000);
+    }, 30000); // 30 seconds instead of 1 second
     
     return () => clearInterval(interval);
   }, [user?.id, user?.role]);
@@ -294,13 +294,26 @@ export default function DashboardLayout({
 
         {/* Main Content */}
         <main className="flex-1 overflow-y-auto p-4 lg:p-6">
-          {stats && stats.length > 0 && (
+          {stats && stats.length > 0 && activeTab === 'dashboard' && (
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
               {stats.map((stat, index) => {
                 const Icon = stat.icon;
+                const isClickable = stat.clickable !== false && stat.onClick;
                 return (
-                  <motion.div key={stat.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} whileHover={{ y: -2, transition: { duration: 0.2 } }}>
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 h-full">
+                  <motion.div 
+                    key={stat.label} 
+                    initial={{ opacity: 0, y: 20 }} 
+                    animate={{ opacity: 1, y: 0 }} 
+                    transition={{ delay: index * 0.05 }} 
+                    whileHover={isClickable ? { y: -4, scale: 1.02, transition: { duration: 0.2 } } : undefined}
+                    whileTap={isClickable ? { scale: 0.98 } : undefined}
+                  >
+                    <div 
+                      className={`bg-white rounded-xl shadow-sm border border-gray-100 p-4 h-full transition-all ${
+                        isClickable ? 'cursor-pointer hover:shadow-md hover:border-emerald-200' : ''
+                      }`}
+                      onClick={stat.onClick}
+                    >
                       <div className="flex items-start justify-between">
                         <div>
                           <p className="text-sm text-gray-500 mb-1">{stat.label}</p>
@@ -468,6 +481,7 @@ export const ROLE_MENU_ITEMS: Record<string, MenuItem[]> = {
   ],
   ACCOUNTANT: [
     { id: 'overview', label: 'Overview', icon: Home },
+    { id: 'excel-export', label: 'Excel Export', icon: FileSpreadsheet },
     { id: 'money-logs', label: 'Money Logs', icon: Activity },
     { id: 'chart-of-accounts', label: 'Chart of Accounts', icon: BookOpen },
     { id: 'journal', label: 'Journal Entries', icon: Edit },

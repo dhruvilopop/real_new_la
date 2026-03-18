@@ -9,6 +9,10 @@ import { createEMIPaymentEntry } from '@/lib/accounting-service';
 // Personal Credit: Requires proof for ALL transactions
 // ============================================
 
+// Simple in-memory cache for credit summary (to prevent DB connection limit issues)
+const creditCache: Map<string, { data: any; timestamp: number }> = new Map();
+const CACHE_TTL = 30000; // 30 seconds cache
+
 // GET - Fetch credit balance and history for a user
 export async function GET(request: NextRequest) {
   try {
@@ -79,6 +83,17 @@ export async function GET(request: NextRequest) {
 
     if (!userId) {
       return NextResponse.json({ error: 'userId is required' }, { status: 400 });
+    }
+
+    // Check cache for summary action (most frequently called)
+    if (action === 'summary') {
+      const cacheKey = `summary_${userId}_${creditType || 'all'}`;
+      const cached = creditCache.get(cacheKey);
+      const now = Date.now();
+      
+      if (cached && (now - cached.timestamp) < CACHE_TTL) {
+        return NextResponse.json(cached.data);
+      }
     }
 
     const user = await db.user.findUnique({
@@ -171,7 +186,19 @@ export async function GET(request: NextRequest) {
         company: user.company
       };
 
-      return NextResponse.json({ success: true, summary, user });
+      const responseData = { success: true, summary, user };
+      
+      // Cache the result
+      const cacheKey = `summary_${userId}_${creditType || 'all'}`;
+      creditCache.set(cacheKey, { data: responseData, timestamp: Date.now() });
+      
+      // Clean old cache entries (keep cache size reasonable)
+      if (creditCache.size > 100) {
+        const oldestKeys = Array.from(creditCache.keys()).slice(0, 50);
+        oldestKeys.forEach(key => creditCache.delete(key));
+      }
+
+      return NextResponse.json(responseData);
     }
 
     // Get all users with personal credit (for Super Admin)

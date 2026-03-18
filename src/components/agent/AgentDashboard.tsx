@@ -334,10 +334,10 @@ export default function AgentDashboard() {
   const activeLoans = loans.filter(l => ['ACTIVE', 'DISBURSED', 'CUSTOMER_SESSION_APPROVED', 'FINAL_APPROVED'].includes(l.status));
 
   const stats = [
-    { label: 'Pending Approvals', value: pendingForAgent.length, icon: Clock, color: 'text-orange-600', bg: 'bg-orange-50' },
-    { label: 'Awaiting Sanction', value: formCompleted.length, icon: ClipboardCheck, color: 'text-violet-600', bg: 'bg-violet-50' },
-    { label: 'In Progress', value: inProgress.length, icon: TrendingUp, color: 'text-blue-600', bg: 'bg-blue-50' },
-    { label: 'Active Loans', value: activeLoans.length, icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-50' }
+    { label: 'Pending Approvals', value: pendingForAgent.length, icon: Clock, color: 'text-orange-600', bg: 'bg-orange-50', onClick: () => setActiveTab('pending') },
+    { label: 'Awaiting Sanction', value: formCompleted.length, icon: ClipboardCheck, color: 'text-violet-600', bg: 'bg-violet-50', onClick: () => setActiveTab('session') },
+    { label: 'In Progress', value: inProgress.length, icon: TrendingUp, color: 'text-blue-600', bg: 'bg-blue-50', onClick: () => setActiveTab('active') },
+    { label: 'Active Loans', value: activeLoans.length, icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-50', onClick: () => setActiveTab('active') }
   ];
 
   const menuItems = ROLE_MENU_ITEMS.AGENT.map(item => ({
@@ -840,25 +840,6 @@ export default function AgentDashboard() {
       default:
         return (
           <div className="space-y-6">
-            {/* Stats */}
-            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {stats.map((stat) => (
-                <Card key={stat.label} className="border-0 shadow-sm">
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm text-gray-500">{stat.label}</p>
-                        <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
-                      </div>
-                      <div className={`w-12 h-12 ${stat.bg} rounded-xl flex items-center justify-center`}>
-                        <stat.icon className={`h-6 w-6 ${stat.color}`} />
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-
             {/* Action Cards */}
             {(pendingForAgent.length > 0 || formCompleted.length > 0) && (
               <div className="grid md:grid-cols-2 gap-4">
