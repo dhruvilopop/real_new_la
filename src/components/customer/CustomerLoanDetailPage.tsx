@@ -203,6 +203,20 @@ export default function CustomerLoanDetailPage() {
 
   // Submit payment request
   const handleSubmitPayment = async () => {
+    // Debug: Show all form values
+    alert(`Debug Info:
+- EMI ID: ${selectedEmi?.id || 'MISSING'}
+- User ID: ${user?.id || 'MISSING'}
+- Loan ID: ${loanId || 'MISSING'}
+- Payment Type: ${selectedPaymentType}
+- Partial Amount: ${partialAmount || 'EMPTY'}
+- Next Payment Date: ${nextPaymentDate || 'EMPTY'}
+- UTR Number: ${utrNumber || 'EMPTY'}
+- Proof File: ${proofFile?.name || 'NONE'}
+- Proof Preview: ${proofPreview ? 'EXISTS' : 'NONE'}
+- Payment Loading: ${paymentLoading}
+- Uploading Proof: ${uploadingProof}`);
+
     console.log('handleSubmitPayment called', {
       selectedEmi: selectedEmi?.id,
       user: user?.id,
