@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { LoanStatus } from '@prisma/client';
-import { createLoanDisbursementEntry, createProcessingFeeEntry } from '@/lib/accounting-service';
 
 const ALLOWED_ACTIONS: Record<string, Record<string, { 
   nextStatus: LoanStatus; 
@@ -13,9 +12,7 @@ const ALLOWED_ACTIONS: Record<string, Record<string, {
     reject: { nextStatus: LoanStatus.REJECTED_BY_SA, roles: ['SUPER_ADMIN'] }
   },
   SA_APPROVED: {
-    // Company approves SA_APPROVED loans and assigns to Agent
     approve: { nextStatus: LoanStatus.COMPANY_APPROVED, roles: ['COMPANY'], requiresAssignment: 'agentId' },
-    // Agent can approve directly if SuperAdmin assigned them (skipping Company step)
     agent_direct_approve: { nextStatus: LoanStatus.AGENT_APPROVED_STAGE1, roles: ['AGENT'], requiresAssignment: 'staffId' },
     reject: { nextStatus: LoanStatus.REJECTED_BY_COMPANY, roles: ['COMPANY', 'AGENT'] }
   },
@@ -54,7 +51,7 @@ export async function POST(request: NextRequest) {
       
       for (const id of loanIds) {
         try {
-          const result = await processSingleApproval({
+          await processSingleApproval({
             loanId: id,
             action,
             remarks,
@@ -73,62 +70,31 @@ export async function POST(request: NextRequest) {
       }
       
       const successCount = results.filter(r => r.success).length;
-      const failCount = results.filter(r => !r.success).length;
       
       return NextResponse.json({
         success: successCount > 0,
-        message: `Processed ${successCount} of ${loanIds.length} applications`,
-        results,
-        successCount,
-        failCount
+        message: `Processed ${successCount}/${loanIds.length} applications`,
+        results
       });
     }
 
-    // Handle single approval
+    // Single approval
     if (!loanId || !action || !role) {
-      return NextResponse.json(
-        { error: 'Missing required fields: loanId, action, role' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
     const result = await processSingleApproval({
-      loanId,
-      action,
-      remarks,
-      role,
-      userId,
-      companyId,
-      agentId,
-      staffId,
-      disbursementData,
-      request
+      loanId, action, remarks, role, userId, companyId, agentId, staffId, disbursementData, request
     });
 
-    return NextResponse.json({
-      success: true,
-      loan: { id: loanId, status: result.nextStatus, previousStatus: result.previousStatus }
-    });
+    return NextResponse.json({ success: true, loan: { id: loanId, status: result.nextStatus } });
   } catch (error) {
-    console.error('Workflow error:', error);
-    return NextResponse.json(
-      { error: 'Failed to process workflow action', details: (error as Error).message },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: (error as Error).message }, { status: 500 });
   }
 }
 
 async function processSingleApproval({
-  loanId,
-  action,
-  remarks,
-  role,
-  userId,
-  companyId,
-  agentId,
-  staffId,
-  disbursementData,
-  request
+  loanId, action, remarks, role, userId, companyId, agentId, staffId, disbursementData, request
 }: {
   loanId: string;
   action: string;
@@ -140,105 +106,71 @@ async function processSingleApproval({
   staffId?: string;
   disbursementData?: any;
   request: NextRequest;
-}): Promise<{ nextStatus: LoanStatus; previousStatus: string }> {
+}): Promise<{ nextStatus: LoanStatus }> {
 
+  // Fast loan lookup - only get what we need
   const loan = await db.loanApplication.findUnique({
     where: { id: loanId },
-    include: { company: true, sessionForm: true, loanForm: true, customer: true }
+    select: {
+      id: true,
+      status: true,
+      applicationNo: true,
+      customerId: true,
+      companyId: true,
+      currentHandlerId: true,
+      sessionForm: { select: { processingFee: true } }
+    }
   });
 
-  if (!loan) {
-    throw new Error('Loan not found');
-  }
+  if (!loan) throw new Error('Loan not found');
 
   const currentStatus = loan.status as string;
   const statusActions = ALLOWED_ACTIONS[currentStatus];
-  
-  if (!statusActions) {
-    throw new Error(`No actions allowed for status: ${currentStatus}`);
-  }
+  if (!statusActions) throw new Error(`No actions for status: ${currentStatus}`);
 
   const normalizedRole = role.toUpperCase().replace(/\s+/g, '_');
   let normalizedAction = action.toLowerCase().replace(/\s+/g, '_');
   
-  // Auto-detect agent_direct_approve for SA_APPROVED loans when Agent is the currentHandler
-  // This happens when SuperAdmin directly assigns loan to Agent (skipping Company step)
+  // Auto-detect agent_direct_approve
   if (currentStatus === 'SA_APPROVED' && normalizedAction === 'approve' && normalizedRole === 'AGENT') {
-    // Check if this agent is assigned as currentHandler (SuperAdmin assigned directly)
     if (loan.currentHandlerId && userId && loan.currentHandlerId === userId) {
       normalizedAction = 'agent_direct_approve';
     }
   }
   
   const actionConfig = statusActions[normalizedAction];
-  
-  if (!actionConfig) {
-    throw new Error(`Action '${action}' not allowed for status ${currentStatus}. Allowed: ${Object.keys(statusActions).join(', ')}`);
-  }
-
-  if (!actionConfig.roles.includes(normalizedRole)) {
-    throw new Error(`Role '${role}' is not authorized for this action. Required: ${actionConfig.roles.join(' or ')}`);
-  }
+  if (!actionConfig) throw new Error(`Action '${action}' not allowed`);
+  if (!actionConfig.roles.includes(normalizedRole)) throw new Error(`Role '${role}' not authorized`);
 
   const nextStatus = actionConfig.nextStatus;
 
-  if (actionConfig.requiresAssignment === 'companyId' && !companyId) {
-    throw new Error('Company selection is required for approval');
-  }
+  // Validation
+  if (actionConfig.requiresAssignment === 'companyId' && !companyId) throw new Error('Company required');
+  if (actionConfig.requiresAssignment === 'agentId' && !agentId) throw new Error('Agent required');
+  if (actionConfig.requiresAssignment === 'staffId' && !staffId) throw new Error('Staff required');
 
-  if (actionConfig.requiresAssignment === 'agentId' && !agentId) {
-    throw new Error('Agent selection is required for approval');
-  }
-
-  if (actionConfig.requiresAssignment === 'staffId' && !staffId) {
-    throw new Error('Staff selection is required for approval');
-  }
-
-  const updateData: Record<string, unknown> = {
-    status: nextStatus,
-    updatedAt: new Date()
-  };
-
+  // Build update data
+  const updateData: Record<string, unknown> = { status: nextStatus };
   if (companyId) updateData.companyId = companyId;
-  if (staffId) {
-    updateData.currentHandlerId = staffId;
-    updateData.currentStage = 'STAFF_VERIFICATION';
-  }
-  if (agentId) {
-    updateData.currentHandlerId = agentId;
-    updateData.currentStage = 'AGENT_SESSION';
-  }
+  if (staffId) { updateData.currentHandlerId = staffId; updateData.currentStage = 'STAFF_VERIFICATION'; }
+  if (agentId) { updateData.currentHandlerId = agentId; updateData.currentStage = 'AGENT_SESSION'; }
 
+  // Status-specific updates
   switch (nextStatus) {
-    case LoanStatus.SA_APPROVED:
-      updateData.saApprovedAt = new Date();
-      break;
-    case LoanStatus.COMPANY_APPROVED:
-      updateData.companyApprovedAt = new Date();
-      break;
-    case LoanStatus.AGENT_APPROVED_STAGE1:
-      updateData.agentApprovedAt = new Date();
-      break;
+    case LoanStatus.SA_APPROVED: updateData.saApprovedAt = new Date(); break;
+    case LoanStatus.COMPANY_APPROVED: updateData.companyApprovedAt = new Date(); break;
+    case LoanStatus.AGENT_APPROVED_STAGE1: updateData.agentApprovedAt = new Date(); break;
     case LoanStatus.LOAN_FORM_COMPLETED:
       updateData.loanFormCompletedAt = new Date();
       updateData.currentStage = 'SESSION_CREATION';
-      // Reassign back to the agent who assigned this staff
-      const staff = await db.user.findUnique({
-        where: { id: userId }
-      });
-      if (staff?.agentId) {
-        updateData.currentHandlerId = staff.agentId;
+      if (userId) {
+        const staff = await db.user.findUnique({ where: { id: userId }, select: { agentId: true } });
+        if (staff?.agentId) updateData.currentHandlerId = staff.agentId;
       }
       break;
-    case LoanStatus.SESSION_CREATED:
-      updateData.sessionCreatedAt = new Date();
-      break;
-    case LoanStatus.CUSTOMER_SESSION_APPROVED:
-      updateData.customerApprovedAt = new Date();
-      break;
-    case LoanStatus.FINAL_APPROVED:
-      updateData.finalApprovedAt = new Date();
-      break;
+    case LoanStatus.SESSION_CREATED: updateData.sessionCreatedAt = new Date(); break;
+    case LoanStatus.CUSTOMER_SESSION_APPROVED: updateData.customerApprovedAt = new Date(); break;
+    case LoanStatus.FINAL_APPROVED: updateData.finalApprovedAt = new Date(); break;
     case LoanStatus.ACTIVE:
       updateData.disbursedAt = new Date();
       updateData.disbursedById = userId;
@@ -259,178 +191,115 @@ async function processSingleApproval({
       break;
   }
 
-  await db.loanApplication.update({
-    where: { id: loanId },
-    data: updateData
+  // Single transaction for all critical operations
+  await db.$transaction(async (tx) => {
+    // Update loan
+    await tx.loanApplication.update({ where: { id: loanId }, data: updateData });
+
+    // Handle disbursement accounting
+    if (nextStatus === LoanStatus.ACTIVE && disbursementData?.bankAccountId) {
+      const bank = await tx.bankAccount.findUnique({ 
+        where: { id: disbursementData.bankAccountId },
+        select: { currentBalance: true }
+      });
+      
+      if (bank && bank.currentBalance >= disbursementData.amount) {
+        await tx.bankAccount.update({
+          where: { id: disbursementData.bankAccountId },
+          data: { currentBalance: { decrement: disbursementData.amount } }
+        });
+        
+        await tx.bankTransaction.create({
+          data: {
+            bankAccountId: disbursementData.bankAccountId,
+            transactionType: 'DEBIT',
+            amount: disbursementData.amount,
+            balanceAfter: bank.currentBalance - disbursementData.amount,
+            description: `Loan Disbursement - ${loan.applicationNo}`,
+            referenceType: 'LOAN_DISBURSEMENT',
+            referenceId: loanId,
+            createdById: userId || 'SYSTEM'
+          }
+        });
+      }
+    }
+
+    // Create workflow log
+    await tx.workflowLog.create({
+      data: {
+        loanApplicationId: loanId,
+        actionById: userId || 'system',
+        previousStatus: currentStatus,
+        newStatus: nextStatus,
+        action: normalizedAction,
+        remarks,
+        ipAddress: request.headers.get('x-forwarded-for') || 'unknown'
+      }
+    });
   });
 
-  // Create accounting entries for loan disbursement
-  if (nextStatus === LoanStatus.ACTIVE && disbursementData) {
+  // Non-critical operations - run in parallel (don't await)
+  setImmediate(async () => {
     try {
-      // Deduct from bank account if bankAccountId is provided
-      if (disbursementData.bankAccountId) {
-        const bankAccount = await db.bankAccount.findUnique({
-          where: { id: disbursementData.bankAccountId }
-        });
-
-        if (bankAccount) {
-          if (bankAccount.currentBalance < disbursementData.amount) {
-            throw new Error(`Insufficient bank balance. Available: ${bankAccount.currentBalance}, Required: ${disbursementData.amount}`);
-          }
-
-          // Deduct from bank balance
-          await db.bankAccount.update({
-            where: { id: disbursementData.bankAccountId },
-            data: {
-              currentBalance: { decrement: disbursementData.amount }
-            }
-          });
-
-          // Create bank transaction log
-          await db.bankTransaction.create({
-            data: {
-              bankAccountId: disbursementData.bankAccountId,
-              transactionType: 'DEBIT',
-              amount: disbursementData.amount,
-              balanceAfter: bankAccount.currentBalance - disbursementData.amount,
-              description: `Loan Disbursement - ${loan.applicationNo} - ${loan.customer?.name || 'Customer'}`,
-              referenceType: 'LOAN_DISBURSEMENT',
-              referenceId: loanId,
-              createdById: userId || 'SYSTEM'
-            }
-          });
+      const parallelOps: Promise<unknown>[] = [];
+      
+      // Notification
+      if (loan.customerId && ['SESSION_CREATED', 'FINAL_APPROVED', 'ACTIVE'].includes(nextStatus)) {
+        const messages: Record<string, { title: string; message: string }> = {
+          SESSION_CREATED: { title: 'Session Created', message: `Your loan session for ${loan.applicationNo} has been created.` },
+          FINAL_APPROVED: { title: 'Loan Approved', message: `Your loan ${loan.applicationNo} has been approved.` },
+          ACTIVE: { title: 'Loan Disbursed', message: `Your loan ${loan.applicationNo} has been disbursed.` }
+        };
+        if (messages[nextStatus]) {
+          parallelOps.push(db.notification.create({
+            data: { userId: loan.customerId, type: nextStatus, ...messages[nextStatus] }
+          }));
         }
       }
 
-      // Create loan disbursement journal entry
-      await createLoanDisbursementEntry({
-        loanId,
-        customerId: loan.customerId,
-        amount: disbursementData.amount,
-        disbursementDate: new Date(),
-        createdById: userId || 'SYSTEM',
-      });
+      // Timeline
+      parallelOps.push(db.loanProgressTimeline.create({
+        data: {
+          loanApplicationId: loanId,
+          stage: nextStatus,
+          status: 'COMPLETED',
+          handlerId: userId || 'system',
+          notes: remarks || `${currentStatus} → ${nextStatus}`
+        }
+      }));
 
-      // Create processing fee entry if applicable
-      if (loan.sessionForm?.processingFee && loan.sessionForm.processingFee > 0) {
-        await createProcessingFeeEntry({
-          loanId,
-          customerId: loan.customerId,
-          amount: loan.sessionForm.processingFee,
-          collectionDate: new Date(),
-          createdById: userId || 'SYSTEM',
-        });
-      }
-    } catch (accountingError) {
-      console.error('Loan disbursement accounting entry failed:', accountingError);
-      // Don't fail the disbursement if accounting fails
-    }
-  }
-
-  // Create workflow log
-  await db.workflowLog.create({
-    data: {
-      loanApplicationId: loanId,
-      actionById: userId || 'system',
-      previousStatus: currentStatus,
-      newStatus: nextStatus,
-      action: normalizedAction,
-      remarks,
-      ipAddress: request.headers.get('x-forwarded-for') || 'unknown'
-    }
+      await Promise.all(parallelOps);
+    } catch {}
   });
 
-  // Create notification for customer if needed
-  if (nextStatus === LoanStatus.SESSION_CREATED && loan.customerId) {
-    await db.notification.create({
-      data: {
-        userId: loan.customerId,
-        type: 'SESSION_CREATED',
-        title: 'Loan Session Created',
-        message: `Your loan session for ${loan.applicationNo} has been created. Please review and approve.`
-      }
-    });
-  }
-
-  if (nextStatus === LoanStatus.FINAL_APPROVED && loan.customerId) {
-    await db.notification.create({
-      data: {
-        userId: loan.customerId,
-        type: 'LOAN_APPROVED',
-        title: 'Loan Approved',
-        message: `Congratulations! Your loan ${loan.applicationNo} has been fully approved and is ready for disbursement.`
-      }
-    });
-  }
-
-  if (nextStatus === LoanStatus.ACTIVE && loan.customerId) {
-    await db.notification.create({
-      data: {
-        userId: loan.customerId,
-        type: 'LOAN_DISBURSED',
-        title: 'Loan Disbursed',
-        message: `Your loan ${loan.applicationNo} has been disbursed. Amount: ₹${disbursementData?.amount?.toLocaleString() || 'N/A'}`
-      }
-    });
-  }
-
-  // Create timeline entry
-  await db.loanProgressTimeline.create({
-    data: {
-      loanApplicationId: loanId,
-      stage: nextStatus,
-      status: 'COMPLETED',
-      handlerId: userId || 'system',
-      notes: remarks || `Status changed from ${currentStatus} to ${nextStatus}`
-    }
-  });
-
-  return { nextStatus, previousStatus: currentStatus };
+  return { nextStatus };
 }
 
 export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const loanId = searchParams.get('loanId');
+  const { searchParams } = new URL(request.url);
+  const loanId = searchParams.get('loanId');
+  if (!loanId) return NextResponse.json({ error: 'Loan ID required' }, { status: 400 });
 
-    if (!loanId) {
-      return NextResponse.json({ error: 'Loan ID is required' }, { status: 400 });
-    }
-
-    const loan = await db.loanApplication.findUnique({
-      where: { id: loanId },
-      include: {
-        workflowLogs: { orderBy: { createdAt: 'asc' }, take: 20, include: { actionBy: { select: { name: true, email: true } } } },
-        customer: { select: { id: true, name: true, email: true } },
-        company: { select: { id: true, name: true } }
+  const loan = await db.loanApplication.findUnique({
+    where: { id: loanId },
+    select: {
+      status: true,
+      workflowLogs: { 
+        orderBy: { createdAt: 'desc' }, 
+        take: 10, 
+        select: { action: true, newStatus: true, createdAt: true, actionBy: { select: { name: true } } }
       }
-    });
-
-    if (!loan) {
-      return NextResponse.json({ error: 'Loan not found' }, { status: 404 });
     }
+  });
 
-    const currentStatus = loan.status as string;
-    const statusActions = ALLOWED_ACTIONS[currentStatus] || {};
+  if (!loan) return NextResponse.json({ error: 'Loan not found' }, { status: 404 });
 
-    return NextResponse.json({
-      currentStatus,
-      possibleActions: Object.entries(statusActions).map(([action, config]) => ({
-        action,
-        nextStatus: config.nextStatus,
-        allowedRoles: config.roles,
-        requiresAssignment: config.requiresAssignment
-      })),
-      workflowHistory: loan.workflowLogs,
-      loan: {
-        id: loan.id,
-        applicationNo: loan.applicationNo,
-        status: loan.status,
-        customer: loan.customer,
-        company: loan.company
-      }
-    });
-  } catch (error) {
-    return NextResponse.json({ error: 'Failed to fetch workflow status' }, { status: 500 });
-  }
+  const statusActions = ALLOWED_ACTIONS[loan.status as string] || {};
+  return NextResponse.json({
+    currentStatus: loan.status,
+    possibleActions: Object.entries(statusActions).map(([action, config]) => ({
+      action, nextStatus: config.nextStatus, allowedRoles: config.roles
+    })),
+    history: loan.workflowLogs
+  });
 }
