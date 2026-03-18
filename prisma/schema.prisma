@@ -112,6 +112,9 @@ model User {
   actionLogs             ActionLog[]
   undoneActions          ActionLog[]        @relation("ActionUndoBy")
   redoneActions          ActionLog[]        @relation("ActionRedoBy")
+  // Payment Request relations
+  paymentRequests        PaymentRequest[]
+  reviewedPaymentRequests PaymentRequest[]  @relation("PaymentRequestReviewer")
   @@index([email])
   @@index([phone])
   @@index([role])
@@ -160,6 +163,8 @@ model Company {
   offlineLoans        OfflineLoan[]
   // Fixed Assets relations
   fixedAssets         FixedAsset[]
+  // Payment Settings
+  paymentSettings     CompanyPaymentSettings?
   @@index([code])
 }
 
@@ -319,6 +324,8 @@ model LoanApplication {
   loanAgreement         LoanAgreement?
   progressTimelines     LoanProgressTimeline[]
   applicationFingerprints ApplicationFingerprint[]
+  // Payment Request relations
+  paymentRequests        PaymentRequest[]
   @@index([applicationNo])
   @@index([customerId])
   @@index([status])
@@ -428,10 +435,20 @@ model EMISchedule {
   daysOverdue          Int              @default(0)
   overdueNoticeSent    Boolean          @default(false)
   lastNoticeDate       DateTime?
+  // Partial Payment Tracking
+  partialPaymentCount  Int              @default(0)  // Number of partial payments made (max 2)
+  remainingAmount      Float            @default(0)  // Amount remaining after partial payment
+  newDueDate           DateTime?        // New due date after partial payment
+  // Interest Only Payment Tracking
+  interestOnlyPaidAt   DateTime?        // When interest only was paid
+  interestOnlyAmount   Float            @default(0)  // Interest amount paid
+  duplicatedEMINumber  Int?             // If this EMI was duplicated due to interest only payment
+  originalEMIId        String?          // Reference to original EMI if this is a duplicate
   createdAt            DateTime         @default(now())
   updatedAt            DateTime         @updatedAt
   loanApplication      LoanApplication  @relation(fields: [loanApplicationId], references: [id])
   payments             Payment[]
+  paymentRequests      PaymentRequest[]
   @@unique([loanApplicationId, installmentNumber])
   @@index([loanApplicationId])
   @@index([dueDate])
@@ -1921,4 +1938,156 @@ enum AssetStatus {
   WRITTEN_OFF              // Fully depreciated or lost
   SOLD                     // Sold to another party
   IDLE                     // Not in use but not disposed
+}
+
+// ==================== PAYMENT REQUEST SYSTEM ====================
+
+// Payment Request - Customer initiated payment requests
+model PaymentRequest {
+  id                    String              @id @default(cuid())
+  requestNumber         String              @unique
+  
+  // Loan & EMI Details
+  loanApplicationId     String
+  emiScheduleId         String?
+  customerId            String
+  
+  // Payment Details
+  paymentType           PaymentType         @default(FULL_EMI)
+  requestedAmount       Float
+  
+  // For Partial Payment
+  partialAmount         Float?              // Amount being paid now
+  remainingAmount       Float?              // Remaining amount to pay later
+  newDueDate            DateTime?           // New due date for remaining amount
+  partialPaymentNumber  Int?                @default(0)  // 1st or 2nd partial payment
+  
+  // For Interest Only Payment
+  interestAmount        Float?              // Interest amount being paid
+  principalDeferred     Boolean             @default(false)
+  
+  // Payment Method Details
+  paymentMethod         String?             // UPI, BANK_TRANSFER, CASH
+  utrNumber             String?
+  proofUrl              String?             // Screenshot proof
+  proofFileName         String?
+  
+  // QR/UPI Payment Details
+  upiId                 String?
+  qrCodeUrl             String?
+  bankAccountDetails    String?             // JSON string with bank details
+  
+  // Status & Approval
+  status                PaymentRequestStatus @default(PENDING)
+  
+  // Approval Details
+  reviewedById          String?
+  reviewedAt            DateTime?
+  reviewRemarks         String?
+  rejectionReason       String?
+  
+  // Payment Confirmation
+  paymentConfirmedAt    DateTime?
+  transactionRef        String?
+  
+  // Timestamps
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  
+  // Relations
+  loanApplication       LoanApplication     @relation(fields: [loanApplicationId], references: [id])
+  emiSchedule           EMISchedule?        @relation(fields: [emiScheduleId], references: [id])
+  customer              User                @relation(fields: [customerId], references: [id])
+  reviewer              User?               @relation("PaymentRequestReviewer", fields: [reviewedById], references: [id])
+  
+  @@index([loanApplicationId])
+  @@index([customerId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+enum PaymentRequestStatus {
+  PENDING                // Waiting for cashier review
+  UNDER_REVIEW           // Being reviewed by cashier
+  APPROVED               // Approved by cashier, EMI marked paid
+  REJECTED               // Rejected by cashier
+  EXPIRED                // Request expired (e.g., time limit passed)
+  CANCELLED              // Cancelled by customer
+}
+
+// Payment Option Settings - Role-based settings for payment options
+model PaymentOptionSettings {
+  id                    String              @id @default(cuid())
+  
+  // Scope - can be global, company-specific, or loan-specific
+  scope                 String              @default("GLOBAL")  // GLOBAL, COMPANY, LOAN
+  companyId             String?
+  loanApplicationId     String?
+  
+  // Payment Options Enabled
+  enableFullPayment     Boolean             @default(true)
+  enablePartialPayment  Boolean             @default(true)
+  enableInterestOnly    Boolean             @default(true)
+  
+  // Partial Payment Settings
+  maxPartialPayments    Int                 @default(2)        // Max 2 partial payments per EMI
+  partialPaymentFee     Float               @default(0)
+  
+  // Interest Only Settings
+  maxInterestOnlyPerLoan Int                @default(3)        // Max 3 interest-only payments per loan
+  interestOnlyFee       Float               @default(0)
+  
+  // Payment Method Settings
+  acceptedPaymentMethods String             @default("UPI,BANK_TRANSFER,CASH")
+  
+  // UPI/QR Settings
+  defaultUpiId          String?
+  defaultQrCodeUrl      String?
+  defaultBankDetails    String?             // JSON string with bank details
+  
+  // Created/Updated by
+  createdById           String
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  
+  @@index([scope])
+  @@index([companyId])
+  @@index([loanApplicationId])
+}
+
+// Company Payment Settings - Company-specific payment configurations
+model CompanyPaymentSettings {
+  id                    String              @id @default(cuid())
+  companyId             String              @unique
+  
+  // Payment Options
+  enableFullPayment     Boolean             @default(true)
+  enablePartialPayment  Boolean             @default(true)
+  enableInterestOnly    Boolean             @default(true)
+  
+  // Partial Payment Rules
+  maxPartialPaymentsPerEMI  Int             @default(2)
+  partialPaymentFeePercent  Float           @default(0)
+  allowDateChangeOnPartial  Boolean         @default(true)
+  
+  // Interest Only Rules
+  maxInterestOnlyPayments   Int             @default(3)
+  interestOnlyFeePercent    Float           @default(0)
+  addNewEMIOnInterestOnly   Boolean         @default(true)  // Add new EMI with principal + interest
+  
+  // Payment Methods
+  acceptedMethods        String             @default("UPI,BANK_TRANSFER,CASH")
+  
+  // UPI Configuration
+  companyUpiId          String?
+  companyQrCodeUrl      String?
+  
+  // Bank Account for Collections
+  collectionBankAccountId String?
+  
+  // Created/Updated
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  
+  company               Company?            @relation(fields: [companyId], references: [id])
 }

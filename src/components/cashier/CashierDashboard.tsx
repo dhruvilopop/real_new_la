@@ -24,6 +24,7 @@ import { formatCurrency, formatDate, generateTransactionId, generateReceiptNumbe
 import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
+import PaymentRequestsSection from '@/components/payment/PaymentRequestsSection';
 
 interface Loan {
   id: string; applicationNo: string; status: string; requestedAmount: number; loanType: string;
@@ -473,6 +474,9 @@ export default function CashierDashboard() {
             </CardContent>
           </Card>
         );
+
+      case 'paymentRequests':
+        return <PaymentRequestsSection cashierId={user?.id || ''} />;
 
       case 'dashboard':
       default:

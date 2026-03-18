@@ -455,6 +455,7 @@ export const ROLE_MENU_ITEMS: Record<string, MenuItem[]> = {
   CASHIER: [
     { id: 'dashboard', label: 'Dashboard', icon: Home },
     { id: 'pending', label: 'Pending Disbursement', icon: Clock },
+    { id: 'paymentRequests', label: 'Payment Requests', icon: FileText },
     { id: 'history', label: 'Recent', icon: Receipt },
     { id: 'activeLoans', label: 'Active Loans', icon: Banknote },
     { id: 'audit', label: 'Audit Logs', icon: Activity }

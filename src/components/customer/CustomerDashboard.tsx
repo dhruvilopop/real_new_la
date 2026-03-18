@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSettings } from '@/contexts/SettingsContext';
@@ -16,7 +16,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Home, FileText, CheckCircle, XCircle, Clock, Wallet, TrendingUp, Percent, Calendar, IndianRupee, PenLine, AlertCircle, CreditCard, User, Briefcase, Building2, ChevronRight, LogOut, Bell, Settings, History, BarChart3, Calculator, Gift, RefreshCw, Download, Share2, ClockIcon, AlertTriangle, Sparkles, ArrowUpRight, PiggyBank, FileDown } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Home, FileText, CheckCircle, XCircle, Clock, Wallet, TrendingUp, Percent, Calendar, IndianRupee, PenLine, AlertCircle, CreditCard, User, Briefcase, Building2, ChevronRight, LogOut, Bell, Settings, History, BarChart3, Calculator, Gift, RefreshCw, Download, Share2, ClockIcon, AlertTriangle, Sparkles, ArrowUpRight, PiggyBank, FileDown, RefreshCcw } from 'lucide-react';
 import { formatCurrency, calculateEMI, formatDate } from '@/utils/helpers';
 import { toast } from '@/hooks/use-toast';
 import { useLocationTracking } from '@/hooks/useLocationTracking';
@@ -65,11 +67,19 @@ export default function CustomerDashboard() {
   const [showLoanApply, setShowLoanApply] = useState(false);
   const [showLoanDetails, setShowLoanDetails] = useState(false);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
+  const [showSanctionAcceptDialog, setShowSanctionAcceptDialog] = useState(false);
   const [selectedEmi, setSelectedEmi] = useState<EMISchedule | null>(null);
   const [emiSchedules, setEmiSchedules] = useState<EMISchedule[]>([]);
   const [loanForm, setLoanForm] = useState({ loanType: 'PERSONAL', amount: 100000, tenure: 12, purpose: '' });
   const [calculatedEMI, setCalculatedEMI] = useState<any>(null);
   const [notifications, setNotifications] = useState<any[]>([]);
+  
+  // Signature canvas state
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [signatureData, setSignatureData] = useState<string | null>(null);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [showSignatureError, setShowSignatureError] = useState(false);
   
   // Advanced features state
   const [preApprovedOffers, setPreApprovedOffers] = useState<PreApprovedOffer[]>([]);
@@ -99,6 +109,21 @@ export default function CustomerDashboard() {
       setCalculatedEMI(calc);
     }
   }, [loanForm.amount, loanForm.tenure]);
+
+  // Initialize signature canvas
+  useEffect(() => {
+    if (showSanctionAcceptDialog && canvasRef.current) {
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 2;
+        ctx.lineCap = 'round';
+      }
+    }
+  }, [showSanctionAcceptDialog]);
 
   const fetchLoans = async () => {
     if (!user) return;
@@ -214,7 +239,6 @@ export default function CustomerDashboard() {
         setLoanForm({ loanType: 'PERSONAL', amount: 100000, tenure: 12, purpose: '' });
         fetchLoans();
         
-        // Track location for loan application
         if (!isPermissionDenied && data.loan?.id) {
           trackLocation('LOAN_APPLY', { loanApplicationId: data.loan.id });
         }
@@ -229,30 +253,117 @@ export default function CustomerDashboard() {
     }
   };
 
-  const handleApproveSession = async (loan: Loan) => {
-    if (!user) return;
+  // Signature canvas handlers
+  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    setIsDrawing(true);
+    setShowSignatureError(false);
+    
+    const rect = canvas.getBoundingClientRect();
+    let clientX, clientY;
+    
+    if ('touches' in e) {
+      clientX = e.touches[0].clientX;
+      clientY = e.touches[0].clientY;
+    } else {
+      clientX = e.clientX;
+      clientY = e.clientY;
+    }
+    
+    ctx.beginPath();
+    ctx.moveTo(clientX - rect.left, clientY - rect.top);
+  };
+
+  const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    if (!isDrawing) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    const rect = canvas.getBoundingClientRect();
+    let clientX, clientY;
+    
+    if ('touches' in e) {
+      clientX = e.touches[0].clientX;
+      clientY = e.touches[0].clientY;
+      e.preventDefault();
+    } else {
+      clientX = e.clientX;
+      clientY = e.clientY;
+    }
+    
+    ctx.lineTo(clientX - rect.left, clientY - rect.top);
+    ctx.stroke();
+  };
+
+  const stopDrawing = () => {
+    if (isDrawing && canvasRef.current) {
+      setSignatureData(canvasRef.current.toDataURL());
+    }
+    setIsDrawing(false);
+  };
+
+  const clearSignature = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    setSignatureData(null);
+  };
+
+  const handleApproveSessionWithSignature = async () => {
+    if (!selectedLoan || !user) return;
+    
+    // Validate signature
+    if (!signatureData) {
+      setShowSignatureError(true);
+      toast({ title: 'Signature Required', description: 'Please sign to accept the sanction', variant: 'destructive' });
+      return;
+    }
+    
+    if (!termsAccepted) {
+      toast({ title: 'Terms Required', description: 'Please accept the terms and conditions', variant: 'destructive' });
+      return;
+    }
+    
     setLoading(true);
     try {
       const response = await fetch('/api/workflow/approve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          loanId: loan.id,
+          loanId: selectedLoan.id,
           action: 'approve_session',
           role: 'CUSTOMER',
           userId: user.id,
-          remarks: 'Session approved by customer'
+          remarks: 'Session approved by customer with digital signature',
+          signatureData: signatureData
         })
       });
       if (response.ok) {
-        toast({ title: 'Sanction Approved', description: 'Your loan sanction has been approved!' });
+        toast({ title: 'Sanction Accepted', description: 'Your loan sanction has been accepted successfully!' });
+        setShowSanctionAcceptDialog(false);
         setShowLoanDetails(false);
+        setSignatureData(null);
+        setTermsAccepted(false);
         fetchLoans();
         
-        // Track location for sanction confirmation
         if (!isPermissionDenied) {
-          trackLocation('SESSION_CONFIRM', { loanApplicationId: loan.id });
+          trackLocation('SESSION_CONFIRM', { loanApplicationId: selectedLoan.id });
         }
+      } else {
+        const data = await response.json();
+        toast({ title: 'Error', description: data.error || 'Failed to approve session', variant: 'destructive' });
       }
     } catch (error) {
       toast({ title: 'Error', description: 'Failed to approve session', variant: 'destructive' });
@@ -309,7 +420,6 @@ export default function CustomerDashboard() {
         setShowPaymentDialog(false);
         fetchEMISchedules(selectedLoan.id);
         
-        // Track location for EMI payment
         if (!isPermissionDenied && data.payment?.id) {
           trackLocation('EMI_PAY', { 
             loanApplicationId: selectedLoan.id, 
@@ -381,7 +491,6 @@ export default function CustomerDashboard() {
     if (!selectedLoan || !user) return;
     setLoading(true);
     try {
-      // Calculate outstanding amount
       const paidSchedules = emiSchedules.filter(e => e.paymentStatus === 'PAID');
       const pendingSchedules = emiSchedules.filter(e => e.paymentStatus !== 'PAID');
       const outstandingPrincipal = pendingSchedules.reduce((sum, e) => sum + e.principalAmount, 0);
@@ -479,7 +588,6 @@ export default function CustomerDashboard() {
   };
 
   const handleDownloadStatement = (loan: Loan, type: string) => {
-    // In production, this would generate a PDF
     toast({ title: 'Download Started', description: `Your ${type} is being generated.` });
   };
 
@@ -540,7 +648,18 @@ export default function CustomerDashboard() {
       key={loan.id}
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm"
+      className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm cursor-pointer hover:shadow-md transition-all"
+      onClick={() => {
+        if (['ACTIVE', 'DISBURSED'].includes(loan.status)) {
+          router.push(`/customer/loan/${loan.id}`);
+        } else if (loan.status === 'SESSION_CREATED') {
+          setSelectedLoan(loan);
+          setShowSanctionAcceptDialog(true);
+        } else {
+          setSelectedLoan(loan);
+          setShowLoanDetails(true);
+        }
+      }}
     >
       <div className="flex items-start justify-between mb-3">
         <div className="flex-1">
@@ -563,23 +682,17 @@ export default function CustomerDashboard() {
       
       <div className="flex items-center justify-between">
         <p className="text-xs text-gray-400">{formatDate(loan.createdAt)}</p>
-        {showAction && (
-          <Button 
-            size="sm" 
-            variant="outline" 
-            onClick={() => { 
-              // For active/dispersed loans, navigate to full page
-              if (['ACTIVE', 'DISBURSED'].includes(loan.status)) {
-                router.push(`/customer/loan/${loan.id}`);
-              } else {
-                // For other loans, show dialog
-                setSelectedLoan(loan); 
-                setShowLoanDetails(true); 
-              }
-            }}
-          >
-            View Details
+        {loan.status === 'SESSION_CREATED' && (
+          <Button size="sm" className="bg-amber-500 hover:bg-amber-600" onClick={(e) => {
+            e.stopPropagation();
+            setSelectedLoan(loan);
+            setShowSanctionAcceptDialog(true);
+          }}>
+            Review & Accept
           </Button>
+        )}
+        {showAction && loan.status !== 'SESSION_CREATED' && (
+          <ChevronRight className="h-5 w-5 text-gray-400" />
         )}
       </div>
     </motion.div>
@@ -605,6 +718,40 @@ export default function CustomerDashboard() {
               </CardContent>
             </Card>
 
+            {/* Action Required - Pending Sanctions */}
+            {pendingSanctionLoans.length > 0 && (
+              <Card className="border-amber-200 bg-amber-50 shadow-sm cursor-pointer hover:shadow-md transition-all" onClick={() => {
+                const loan = pendingSanctionLoans[0];
+                setSelectedLoan(loan);
+                setShowSanctionAcceptDialog(true);
+              }}>
+                <CardHeader className="pb-2">
+                  <CardTitle className="flex items-center gap-2 text-amber-800 text-lg">
+                    <AlertCircle className="h-5 w-5" /> Action Required
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-amber-700 mb-4 text-sm">You have {pendingSanctionLoans.length} loan sanction(s) awaiting your approval.</p>
+                  {pendingSanctionLoans.slice(0, 1).map((loan) => (
+                    <div key={loan.id} className="bg-white p-4 rounded-lg shadow-sm">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-semibold">{loan.applicationNo}</p>
+                          <p className="text-sm text-gray-500">{formatCurrency(loan.sessionForm?.approvedAmount || loan.requestedAmount)}</p>
+                          {loan.sessionForm && (
+                            <p className="text-xs text-gray-400 mt-1">EMI: {formatCurrency(loan.sessionForm.emiAmount)}/mo</p>
+                          )}
+                        </div>
+                        <Button size="sm" className="bg-amber-500 hover:bg-amber-600">
+                          Review & Sign
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
+
             {/* Pre-Approved Offers */}
             {preApprovedOffers.length > 0 && (
               <Card className="border-purple-200 bg-purple-50 shadow-sm">
@@ -615,7 +762,7 @@ export default function CustomerDashboard() {
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {preApprovedOffers.map((offer) => (
-                    <div key={offer.id} className="bg-white p-4 rounded-lg shadow-sm">
+                    <div key={offer.id} className="bg-white p-4 rounded-lg shadow-sm cursor-pointer hover:shadow-md transition-all" onClick={() => handleAcceptPreApprovedOffer(offer.id)}>
                       <div className="flex items-center justify-between mb-2">
                         <div>
                           <p className="font-bold text-lg text-purple-800">{formatCurrency(offer.offerAmount)}</p>
@@ -628,7 +775,7 @@ export default function CustomerDashboard() {
                       </div>
                       <div className="flex items-center justify-between">
                         <p className="text-xs text-purple-600">Valid till {formatDate(offer.validTill)}</p>
-                        <Button size="sm" className="bg-purple-500 hover:bg-purple-600" onClick={() => handleAcceptPreApprovedOffer(offer.id)}>
+                        <Button size="sm" className="bg-purple-500 hover:bg-purple-600">
                           Accept Offer
                         </Button>
                       </div>
@@ -638,10 +785,10 @@ export default function CustomerDashboard() {
               </Card>
             )}
 
-            {/* Quick Stats */}
+            {/* Quick Stats - Only for Active Loans */}
             {activeLoans.length > 0 && (
               <div className="grid grid-cols-2 gap-4">
-                <Card className="border-0 shadow-sm">
+                <Card className="border-0 shadow-sm cursor-pointer hover:shadow-md transition-all" onClick={() => setActiveTab('loans')}>
                   <CardContent className="p-4">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center">
@@ -654,7 +801,7 @@ export default function CustomerDashboard() {
                     </div>
                   </CardContent>
                 </Card>
-                <Card className="border-0 shadow-sm">
+                <Card className="border-0 shadow-sm cursor-pointer hover:shadow-md transition-all" onClick={() => setActiveTab('loans')}>
                   <CardContent className="p-4">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
@@ -672,7 +819,7 @@ export default function CustomerDashboard() {
 
             {/* Overdue Alert */}
             {overdueEMIs.length > 0 && (
-              <Card className="border-red-200 bg-red-50 shadow-sm">
+              <Card className="border-red-200 bg-red-50 shadow-sm cursor-pointer hover:shadow-md transition-all" onClick={() => router.push(`/customer/loan/${activeLoans[0]?.id}`)}>
                 <CardContent className="p-4">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
@@ -682,14 +829,7 @@ export default function CustomerDashboard() {
                       <p className="font-semibold text-red-800">{overdueEMIs.length} Overdue EMI(s)</p>
                       <p className="text-sm text-red-600">Total overdue: {formatCurrency(overdueEMIs.reduce((s, e) => s + e.totalAmount, 0))}</p>
                     </div>
-                    <Button size="sm" variant="destructive" onClick={() => {
-                      const loan = activeLoans[0];
-                      if (loan) {
-                        setSelectedLoan(loan);
-                        fetchEMISchedules(loan.id);
-                        setShowLoanDetails(true);
-                      }
-                    }}>
+                    <Button size="sm" variant="destructive">
                       Pay Now
                     </Button>
                   </div>
@@ -697,39 +837,9 @@ export default function CustomerDashboard() {
               </Card>
             )}
 
-            {/* Action Required - Pending Sanctions */}
-            {pendingSanctionLoans.length > 0 && (
-              <Card className="border-amber-200 bg-amber-50 shadow-sm">
-                <CardHeader className="pb-2">
-                  <CardTitle className="flex items-center gap-2 text-amber-800 text-lg">
-                    <AlertCircle className="h-5 w-5" /> Action Required
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-amber-700 mb-4 text-sm">You have {pendingSanctionLoans.length} loan sanction(s) awaiting your approval.</p>
-                  {pendingSanctionLoans.map((loan) => (
-                    <div key={loan.id} className="bg-white p-4 rounded-lg mb-2 shadow-sm">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-semibold">{loan.applicationNo}</p>
-                          <p className="text-sm text-gray-500">{formatCurrency(loan.sessionForm?.approvedAmount || loan.requestedAmount)}</p>
-                          {loan.sessionForm && (
-                            <p className="text-xs text-gray-400 mt-1">EMI: {formatCurrency(loan.sessionForm.emiAmount)}/mo</p>
-                          )}
-                        </div>
-                        <Button size="sm" onClick={() => { setSelectedLoan(loan); setShowLoanDetails(true); }}>
-                          Review
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-            )}
-
             {/* Next EMI Due */}
             {nextEMI && (
-              <Card className="border-0 shadow-sm">
+              <Card className="border-0 shadow-sm cursor-pointer hover:shadow-md transition-all" onClick={() => router.push(`/customer/loan/${activeLoans[0]?.id}`)}>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-lg flex items-center gap-2">
                     <Calendar className="h-5 w-5 text-emerald-500" /> Next EMI Due
@@ -741,7 +851,7 @@ export default function CustomerDashboard() {
                       <p className="text-2xl font-bold text-gray-900">{formatCurrency(nextEMI.totalAmount)}</p>
                       <p className="text-sm text-gray-500">Due: {formatDate(nextEMI.dueDate)}</p>
                     </div>
-                    <Button className="bg-emerald-500 hover:bg-emerald-600" onClick={() => { setSelectedEmi(nextEMI); setShowPaymentDialog(true); }}>
+                    <Button className="bg-emerald-500 hover:bg-emerald-600">
                       Pay Now
                     </Button>
                   </div>
@@ -779,7 +889,7 @@ export default function CustomerDashboard() {
 
             {/* Referral Stats */}
             {referralStats.total > 0 && (
-              <Card className="border-purple-200 bg-purple-50 shadow-sm">
+              <Card className="border-purple-200 bg-purple-50 shadow-sm cursor-pointer hover:shadow-md transition-all" onClick={() => setShowReferralDialog(true)}>
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -798,21 +908,6 @@ export default function CustomerDashboard() {
               </Card>
             )}
 
-            {/* Recent Applications */}
-            {loans.length > 0 && (
-              <Card className="border-0 shadow-sm">
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg">Recent Applications</CardTitle>
-                    <Button variant="ghost" size="sm" onClick={() => setActiveTab('loans')}>View All</Button>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {loans.slice(0, 3).map((loan) => renderLoanCard(loan))}
-                </CardContent>
-              </Card>
-            )}
-
             {/* Services */}
             <Card className="border-0 shadow-sm">
               <CardHeader className="pb-2">
@@ -826,7 +921,7 @@ export default function CustomerDashboard() {
                     { id: '3', title: 'Home Loan', icon: '🏠', minInterestRate: 8 },
                     { id: '4', title: 'Education Loan', icon: '📚', minInterestRate: 8 },
                   ]).map((service) => (
-                    <div key={service.id} className="bg-gray-50 p-3 rounded-lg">
+                    <div key={service.id} className="bg-gray-50 p-3 rounded-lg cursor-pointer hover:bg-gray-100 transition-all" onClick={() => setShowLoanApply(true)}>
                       <div className="text-2xl mb-1">{service.icon || '💰'}</div>
                       <p className="font-medium text-sm">{service.title}</p>
                       <p className="text-xs text-gray-500">From {service.minInterestRate}% p.a.</p>
@@ -907,7 +1002,6 @@ export default function CustomerDashboard() {
           <div className="space-y-4">
             <h2 className="text-xl font-bold text-gray-900">Services</h2>
             
-            {/* Services Grid */}
             <div className="grid gap-3">
               {(services.length > 0 ? services : [
                 { id: '1', title: 'Personal Loan', description: 'Quick approval for personal needs', icon: '👤', minInterestRate: 10, maxInterestRate: 18, minAmount: 50000, maxAmount: 5000000 },
@@ -915,25 +1009,17 @@ export default function CustomerDashboard() {
                 { id: '3', title: 'Home Loan', description: 'Make your dream home a reality', icon: '🏠', minInterestRate: 8, maxInterestRate: 12, minAmount: 500000, maxAmount: 50000000 },
                 { id: '4', title: 'Education Loan', description: 'Invest in education', icon: '📚', minInterestRate: 8, maxInterestRate: 14, minAmount: 100000, maxAmount: 5000000 },
               ]).map((service) => (
-                <Card 
-                  key={service.id} 
-                  className="cursor-pointer hover:shadow-lg transition-all border-0 shadow-sm"
-                  onClick={() => {
-                    setLoanForm({ ...loanForm, loanType: service.loanType || service.title.toUpperCase().replace(' ', '_') });
-                    setShowLoanApply(true);
-                  }}
-                >
+                <Card key={service.id} className="cursor-pointer hover:shadow-md transition-all border-0 shadow-sm" onClick={() => setShowLoanApply(true)}>
                   <CardContent className="p-4">
                     <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 bg-emerald-100 rounded-lg flex items-center justify-center text-2xl">
-                        {service.icon || '💰'}
-                      </div>
+                      <div className="text-3xl">{service.icon || '💰'}</div>
                       <div className="flex-1">
                         <h3 className="font-semibold">{service.title}</h3>
-                        <p className="text-sm text-gray-500">{service.description}</p>
-                        <p className="text-xs text-emerald-600 mt-1">
-                          {service.minInterestRate}% - {service.maxInterestRate}% p.a. | Up to {formatCurrency(service.maxAmount)}
-                        </p>
+                        <p className="text-sm text-gray-500">{service.description || 'Flexible loan options'}</p>
+                        <div className="flex items-center gap-4 mt-2">
+                          <span className="text-xs text-emerald-600 font-medium">{service.minInterestRate}% - {service.maxInterestRate || service.minInterestRate + 5}% p.a.</span>
+                          <span className="text-xs text-gray-400">Up to {formatCurrency(service.maxAmount || 5000000)}</span>
+                        </div>
                       </div>
                       <ChevronRight className="h-5 w-5 text-gray-400" />
                     </div>
@@ -947,57 +1033,42 @@ export default function CustomerDashboard() {
       case 'profile':
         return (
           <div className="space-y-4">
-            <h2 className="text-xl font-bold text-gray-900">Profile</h2>
-            
             <Card className="border-0 shadow-sm">
-              <CardContent className="p-6">
-                <div className="flex items-center gap-4 mb-6">
-                  <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center">
-                    <User className="h-8 w-8 text-emerald-600" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-lg">{user?.name}</p>
-                    <p className="text-gray-500">{user?.email}</p>
-                  </div>
+              <CardContent className="p-6 text-center">
+                <div className="w-20 h-20 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <span className="text-2xl font-bold text-white">{user?.name?.charAt(0) || 'U'}</span>
                 </div>
-                
-                <Separator className="my-4" />
-                
-                <div className="space-y-4">
-                  <div className="flex justify-between py-2">
-                    <span className="text-gray-500">Email</span>
-                    <span className="font-medium">{user?.email}</span>
-                  </div>
-                  <div className="flex justify-between py-2">
-                    <span className="text-gray-500">Phone</span>
-                    <span className="font-medium">{user?.phone || 'Not provided'}</span>
-                  </div>
-                  <div className="flex justify-between py-2">
-                    <span className="text-gray-500">Role</span>
-                    <Badge variant="outline">{user?.role}</Badge>
-                  </div>
-                </div>
-                
-                <Separator className="my-4" />
-                
-                <Button variant="destructive" className="w-full" onClick={signOut}>
-                  <LogOut className="h-4 w-4 mr-2" /> Sign Out
-                </Button>
+                <h2 className="text-xl font-bold">{user?.name}</h2>
+                <p className="text-gray-500">{user?.email}</p>
+                <p className="text-sm text-gray-400">{user?.phone}</p>
               </CardContent>
             </Card>
-
-            {/* App Info */}
+            
             <Card className="border-0 shadow-sm">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-emerald-500 rounded-lg flex items-center justify-center">
-                    <Building2 className="h-5 w-5 text-white" />
+              <CardContent className="p-0">
+                <button className="w-full p-4 flex items-center justify-between hover:bg-gray-50" onClick={() => toast({ title: 'Coming Soon', description: 'This feature will be available soon' })}>
+                  <div className="flex items-center gap-3">
+                    <Bell className="h-5 w-5 text-gray-400" />
+                    <span>Notifications</span>
                   </div>
-                  <div>
-                    <p className="font-semibold">{settings.companyName || 'Money Mitra Financial Advisor'}</p>
-                    <p className="text-xs text-gray-500">Version 2.0.0</p>
+                  <ChevronRight className="h-5 w-5 text-gray-400" />
+                </button>
+                <Separator />
+                <button className="w-full p-4 flex items-center justify-between hover:bg-gray-50" onClick={() => toast({ title: 'Coming Soon', description: 'This feature will be available soon' })}>
+                  <div className="flex items-center gap-3">
+                    <Settings className="h-5 w-5 text-gray-400" />
+                    <span>Settings</span>
                   </div>
-                </div>
+                  <ChevronRight className="h-5 w-5 text-gray-400" />
+                </button>
+                <Separator />
+                <button className="w-full p-4 flex items-center justify-between hover:bg-gray-50 text-red-600" onClick={signOut}>
+                  <div className="flex items-center gap-3">
+                    <LogOut className="h-5 w-5" />
+                    <span>Sign Out</span>
+                  </div>
+                  <ChevronRight className="h-5 w-5" />
+                </button>
               </CardContent>
             </Card>
           </div>
@@ -1124,7 +1195,6 @@ export default function CustomerDashboard() {
           </DialogHeader>
           {selectedLoan && (
             <div className="space-y-4">
-              {/* Status Card */}
               <div className="flex justify-between items-center p-4 bg-gray-50 rounded-lg">
                 <div>
                   <p className="text-sm text-gray-500">Status</p>
@@ -1136,53 +1206,6 @@ export default function CustomerDashboard() {
                 </div>
               </div>
 
-              {/* Session Approval Section */}
-              {selectedLoan.status === 'SESSION_CREATED' && selectedLoan.sessionForm && (
-                <Card className="bg-amber-50 border-amber-200">
-                  <CardHeader>
-                    <CardTitle className="text-amber-800 text-base">Sanction Details - Review & Accept</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="grid grid-cols-2 gap-3 text-sm">
-                      <div>
-                        <p className="text-gray-500">Approved Amount</p>
-                        <p className="font-semibold">{formatCurrency(selectedLoan.sessionForm.approvedAmount)}</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-500">Interest Rate</p>
-                        <p className="font-semibold">{selectedLoan.sessionForm.interestRate}% p.a.</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-500">Tenure</p>
-                        <p className="font-semibold">{selectedLoan.sessionForm.tenure} months</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-500">EMI Amount</p>
-                        <p className="font-semibold">{formatCurrency(selectedLoan.sessionForm.emiAmount)}/mo</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-500">Total Interest</p>
-                        <p className="font-semibold">{formatCurrency(selectedLoan.sessionForm.totalInterest)}</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-500">Total Amount</p>
-                        <p className="font-semibold">{formatCurrency(selectedLoan.sessionForm.totalAmount)}</p>
-                      </div>
-                    </div>
-                    <Separator className="my-3" />
-                    <div className="flex gap-3">
-                      <Button variant="outline" className="flex-1 border-red-200 text-red-600 hover:bg-red-50" onClick={() => handleRejectSession(selectedLoan)}>
-                        <XCircle className="h-4 w-4 mr-2" /> Reject
-                      </Button>
-                      <Button className="flex-1 bg-emerald-500 hover:bg-emerald-600" onClick={() => handleApproveSession(selectedLoan)}>
-                        <CheckCircle className="h-4 w-4 mr-2" /> Accept
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* EMI Schedule for Active Loans */}
               {['ACTIVE', 'DISBURSED'].includes(selectedLoan.status) && emiSchedules.length > 0 && (
                 <div>
                   <h4 className="font-semibold mb-3 flex items-center gap-2">
@@ -1190,7 +1213,6 @@ export default function CustomerDashboard() {
                     EMI Schedule
                   </h4>
                   
-                  {/* EMI Summary */}
                   <div className="grid grid-cols-3 gap-2 mb-4 text-center">
                     <div className="bg-green-50 p-2 rounded-lg">
                       <p className="text-xs text-gray-500">Paid</p>
@@ -1206,7 +1228,6 @@ export default function CustomerDashboard() {
                     </div>
                   </div>
 
-                  {/* Action Buttons */}
                   <div className="grid grid-cols-2 gap-2 mb-4">
                     <Button variant="outline" size="sm" onClick={() => setShowTopUpDialog(true)}>
                       <ArrowUpRight className="h-4 w-4 mr-1" /> Top-Up
@@ -1222,7 +1243,6 @@ export default function CustomerDashboard() {
                     </Button>
                   </div>
 
-                  {/* EMI List */}
                   <ScrollArea className="h-[300px]">
                     <div className="space-y-2">
                       {emiSchedules.map((emi) => (
@@ -1235,15 +1255,9 @@ export default function CustomerDashboard() {
                             <div className="text-right flex items-center gap-2">
                               <div>
                                 <p className="font-semibold">{formatCurrency(emi.totalAmount)}</p>
-                                {emi.penaltyAmount > 0 && (
-                                  <p className="text-xs text-red-600">+{formatCurrency(emi.penaltyAmount)} penalty</p>
-                                )}
+                                {emi.penaltyAmount > 0 && <p className="text-xs text-red-600">+{formatCurrency(emi.penaltyAmount)} penalty</p>}
                               </div>
-                              {emi.paymentStatus === 'PENDING' && (
-                                <Button size="sm" onClick={() => { setSelectedEmi(emi); setShowPaymentDialog(true); }}>
-                                  Pay
-                                </Button>
-                              )}
+                              {emi.paymentStatus === 'PENDING' && <Button size="sm" onClick={() => { setSelectedEmi(emi); setShowPaymentDialog(true); }}>Pay</Button>}
                               {emi.paymentStatus !== 'PENDING' && getEMIStatusBadge(emi.paymentStatus)}
                             </div>
                           </div>
@@ -1253,27 +1267,142 @@ export default function CustomerDashboard() {
                   </ScrollArea>
                 </div>
               )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
-              {/* Loan Timeline */}
-              {loanTimeline.length > 0 && (
-                <div>
-                  <h4 className="font-semibold mb-3 flex items-center gap-2">
-                    <History className="h-4 w-4 text-blue-500" />
-                    Loan Timeline
-                  </h4>
-                  <div className="space-y-2">
-                    {loanTimeline.map((item, idx) => (
-                      <div key={item.id} className="flex items-center gap-3">
-                        <div className={`w-3 h-3 rounded-full ${item.status === 'COMPLETED' ? 'bg-green-500' : item.status === 'PENDING' ? 'bg-yellow-500' : 'bg-red-500'}`} />
-                        <div className="flex-1">
-                          <p className="text-sm font-medium">{item.stage}</p>
-                          <p className="text-xs text-gray-500">{formatDate(item.timestamp)}</p>
-                        </div>
-                      </div>
-                    ))}
+      {/* Sanction Accept Dialog with Signature */}
+      <Dialog open={showSanctionAcceptDialog} onOpenChange={(open) => {
+        setShowSanctionAcceptDialog(open);
+        if (!open) {
+          setSignatureData(null);
+          setTermsAccepted(false);
+          clearSignature();
+        }
+      }}>
+        <DialogContent className="sm:max-w-lg max-h-[95vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <PenLine className="h-5 w-5 text-amber-600" />
+              Accept Loan Sanction
+            </DialogTitle>
+            <DialogDescription>
+              {selectedLoan?.applicationNo} - Review and sign to accept
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedLoan?.sessionForm && (
+            <div className="space-y-4">
+              {/* Sanction Details */}
+              <Card className="bg-amber-50 border-amber-200">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base text-amber-800">Sanction Details</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <p className="text-gray-500">Approved Amount</p>
+                      <p className="font-bold text-lg text-emerald-700">{formatCurrency(selectedLoan.sessionForm.approvedAmount)}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Interest Rate</p>
+                      <p className="font-semibold">{selectedLoan.sessionForm.interestRate}% p.a.</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Tenure</p>
+                      <p className="font-semibold">{selectedLoan.sessionForm.tenure} months</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">EMI Amount</p>
+                      <p className="font-semibold">{formatCurrency(selectedLoan.sessionForm.emiAmount)}/mo</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Total Interest</p>
+                      <p className="font-semibold">{formatCurrency(selectedLoan.sessionForm.totalInterest)}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Total Amount</p>
+                      <p className="font-semibold">{formatCurrency(selectedLoan.sessionForm.totalAmount)}</p>
+                    </div>
                   </div>
+                </CardContent>
+              </Card>
+
+              {/* Terms and Conditions */}
+              <div className="space-y-2">
+                <div className="flex items-start gap-2">
+                  <Checkbox 
+                    id="terms" 
+                    checked={termsAccepted} 
+                    onCheckedChange={(checked) => setTermsAccepted(checked as boolean)}
+                  />
+                  <Label htmlFor="terms" className="text-sm leading-tight cursor-pointer">
+                    I have read and agree to the loan terms and conditions, including the interest rate, 
+                    EMI schedule, and repayment obligations. I understand that this is a legally binding agreement.
+                  </Label>
                 </div>
-              )}
+              </div>
+
+              {/* Signature Pad */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <PenLine className="h-4 w-4" />
+                  Digital Signature *
+                </Label>
+                <p className="text-xs text-gray-500">Sign below to accept the loan sanction</p>
+                <div className="border-2 border-gray-200 rounded-lg overflow-hidden bg-white">
+                  <canvas
+                    ref={canvasRef}
+                    width={400}
+                    height={150}
+                    className="w-full touch-none"
+                    onMouseDown={startDrawing}
+                    onMouseMove={draw}
+                    onMouseUp={stopDrawing}
+                    onMouseLeave={stopDrawing}
+                    onTouchStart={startDrawing}
+                    onTouchMove={draw}
+                    onTouchEnd={stopDrawing}
+                  />
+                </div>
+                {showSignatureError && (
+                  <Alert variant="destructive" className="py-2">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>Please provide your signature</AlertDescription>
+                  </Alert>
+                )}
+                <Button variant="outline" size="sm" onClick={clearSignature} className="mt-1">
+                  <RefreshCcw className="h-4 w-4 mr-1" /> Clear Signature
+                </Button>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 pt-2">
+                <Button 
+                  variant="outline" 
+                  className="flex-1 border-red-200 text-red-600 hover:bg-red-50" 
+                  onClick={() => {
+                    if (selectedLoan) handleRejectSession(selectedLoan);
+                  }}
+                  disabled={loading}
+                >
+                  <XCircle className="h-4 w-4 mr-2" /> Reject
+                </Button>
+                <Button 
+                  className="flex-1 bg-emerald-500 hover:bg-emerald-600" 
+                  onClick={handleApproveSessionWithSignature}
+                  disabled={loading || !termsAccepted}
+                >
+                  {loading ? (
+                    <span>Processing...</span>
+                  ) : (
+                    <>
+                      <CheckCircle className="h-4 w-4 mr-2" /> Accept & Sign
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
           )}
         </DialogContent>
@@ -1304,26 +1433,23 @@ export default function CustomerDashboard() {
                   <span className="text-gray-500">Interest</span>
                   <span className="font-medium">{formatCurrency(selectedEmi.interestAmount)}</span>
                 </div>
+                <Separator className="my-2" />
+                <div className="flex justify-between font-semibold">
+                  <span>Total</span>
+                  <span>{formatCurrency(selectedEmi.totalAmount)}</span>
+                </div>
                 {selectedEmi.penaltyAmount > 0 && (
-                  <div className="flex justify-between mb-2">
-                    <span className="text-red-500">Penalty</span>
-                    <span className="font-medium text-red-600">{formatCurrency(selectedEmi.penaltyAmount)}</span>
+                  <div className="flex justify-between text-red-600 text-sm mt-2">
+                    <span>Penalty</span>
+                    <span>+{formatCurrency(selectedEmi.penaltyAmount)}</span>
                   </div>
                 )}
-                <Separator className="my-2" />
-                <div className="flex justify-between">
-                  <span className="font-semibold">Total Amount</span>
-                  <span className="font-bold text-lg">{formatCurrency(selectedEmi.totalAmount + (selectedEmi.penaltyAmount || 0))}</span>
-                </div>
               </div>
+              <Button className="w-full bg-emerald-500 hover:bg-emerald-600" onClick={handlePayment} disabled={loading}>
+                {loading ? 'Processing...' : `Pay ${formatCurrency(selectedEmi.totalAmount)}`}
+              </Button>
             </div>
           )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowPaymentDialog(false)}>Cancel</Button>
-            <Button className="bg-emerald-500 hover:bg-emerald-600" onClick={handlePayment} disabled={loading}>
-              {loading ? 'Processing...' : 'Pay Now'}
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -1332,23 +1458,20 @@ export default function CustomerDashboard() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Request Loan Top-Up</DialogTitle>
-            <DialogDescription>Get additional funds on your existing loan</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div>
-              <Label>Additional Amount (₹)</Label>
+            <div className="space-y-2">
+              <Label>Top-Up Amount</Label>
               <Input type="number" value={topUpForm.amount} onChange={(e) => setTopUpForm({ ...topUpForm, amount: parseInt(e.target.value) || 0 })} />
             </div>
-            <div>
-              <Label>Reason for Top-Up</Label>
-              <Textarea value={topUpForm.reason} onChange={(e) => setTopUpForm({ ...topUpForm, reason: e.target.value })} placeholder="Enter reason..." />
+            <div className="space-y-2">
+              <Label>Reason</Label>
+              <Textarea value={topUpForm.reason} onChange={(e) => setTopUpForm({ ...topUpForm, reason: e.target.value })} />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowTopUpDialog(false)}>Cancel</Button>
-            <Button className="bg-emerald-500 hover:bg-emerald-600" onClick={handleRequestTopUp} disabled={loading}>
-              {loading ? 'Submitting...' : 'Submit Request'}
-            </Button>
+            <Button onClick={handleRequestTopUp}>Submit Request</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1357,45 +1480,31 @@ export default function CustomerDashboard() {
       <Dialog open={showForeclosureDialog} onOpenChange={setShowForeclosureDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Request Loan Foreclosure</DialogTitle>
-            <DialogDescription>Close your loan early by paying the outstanding amount</DialogDescription>
+            <DialogTitle>Request Foreclosure</DialogTitle>
           </DialogHeader>
           {selectedLoan && emiSchedules.length > 0 && (
             <div className="space-y-4">
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  Foreclosure will close your loan account. You will need to pay the outstanding principal and pending interest.
+                </AlertDescription>
+              </Alert>
               <div className="p-4 bg-gray-50 rounded-lg">
-                {(() => {
-                  const pendingSchedules = emiSchedules.filter(e => e.paymentStatus !== 'PAID');
-                  const outstandingPrincipal = pendingSchedules.reduce((sum, e) => sum + e.principalAmount, 0);
-                  const pendingInterest = pendingSchedules.reduce((sum, e) => sum + e.interestAmount, 0);
-                  return (
-                    <>
-                      <div className="flex justify-between mb-2">
-                        <span className="text-gray-500">Outstanding Principal</span>
-                        <span className="font-medium">{formatCurrency(outstandingPrincipal)}</span>
-                      </div>
-                      <div className="flex justify-between mb-2">
-                        <span className="text-gray-500">Pending Interest</span>
-                        <span className="font-medium">{formatCurrency(pendingInterest)}</span>
-                      </div>
-                      <Separator className="my-2" />
-                      <div className="flex justify-between">
-                        <span className="font-semibold">Total Settlement</span>
-                        <span className="font-bold text-lg">{formatCurrency(outstandingPrincipal + pendingInterest)}</span>
-                      </div>
-                    </>
-                  );
-                })()}
+                <div className="flex justify-between mb-2">
+                  <span>Outstanding Principal</span>
+                  <span>{formatCurrency(emiSchedules.filter(e => e.paymentStatus !== 'PAID').reduce((s, e) => s + e.principalAmount, 0))}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Pending Interest</span>
+                  <span>{formatCurrency(emiSchedules.filter(e => e.paymentStatus !== 'PAID').reduce((s, e) => s + e.interestAmount, 0))}</span>
+                </div>
               </div>
-              <p className="text-sm text-gray-500">
-                Your foreclosure request will be reviewed. You will be notified once approved.
-              </p>
             </div>
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowForeclosureDialog(false)}>Cancel</Button>
-            <Button className="bg-emerald-500 hover:bg-emerald-600" onClick={handleRequestForeclosure} disabled={loading}>
-              {loading ? 'Submitting...' : 'Submit Request'}
-            </Button>
+            <Button onClick={handleRequestForeclosure}>Request Foreclosure</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1404,31 +1513,26 @@ export default function CustomerDashboard() {
       <Dialog open={showEMIDateDialog} onOpenChange={setShowEMIDateDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Request EMI Date Change</DialogTitle>
-            <DialogDescription>Change your EMI due date to better suit your salary date</DialogDescription>
+            <DialogTitle>Change EMI Due Date</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <div>
-              <Label>New EMI Date (Day of Month)</Label>
+            <div className="space-y-2">
+              <Label>New EMI Due Date (Day of Month)</Label>
               <Select value={emiDateForm.newDate.toString()} onValueChange={(v) => setEmiDateForm({ ...emiDateForm, newDate: parseInt(v) })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {[1,5,10,15,20,25,28].map(d => (
-                    <SelectItem key={d} value={d.toString()}>{d}{d === 1 ? 'st' : d === 5 ? 'th' : d === 10 ? 'th' : d === 15 ? 'th' : d === 20 ? 'th' : d === 25 ? 'th' : 'th'} of every month</SelectItem>
-                  ))}
+                  {[1,5,10,15,20,25].map(d => <SelectItem key={d} value={d.toString()}>{d}th of every month</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
-            <div>
+            <div className="space-y-2">
               <Label>Reason</Label>
-              <Textarea value={emiDateForm.reason} onChange={(e) => setEmiDateForm({ ...emiDateForm, reason: e.target.value })} placeholder="Why do you want to change EMI date?" />
+              <Textarea value={emiDateForm.reason} onChange={(e) => setEmiDateForm({ ...emiDateForm, reason: e.target.value })} />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowEMIDateDialog(false)}>Cancel</Button>
-            <Button className="bg-emerald-500 hover:bg-emerald-600" onClick={handleRequestEMIDateChange} disabled={loading}>
-              {loading ? 'Submitting...' : 'Submit Request'}
-            </Button>
+            <Button onClick={handleRequestEMIDateChange}>Submit Request</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1438,28 +1542,20 @@ export default function CustomerDashboard() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Refer a Friend</DialogTitle>
-            <DialogDescription>Earn rewards when your friends take a loan</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="p-4 bg-purple-50 rounded-lg text-center">
-              <Gift className="h-10 w-10 text-purple-600 mx-auto mb-2" />
-              <p className="font-semibold text-purple-800">Earn up to ₹1,000 per referral!</p>
-              <p className="text-sm text-purple-600">When your friend's loan is disbursed</p>
-            </div>
-            <div>
+            <div className="space-y-2">
               <Label>Friend's Email *</Label>
-              <Input type="email" value={referralForm.email} onChange={(e) => setReferralForm({ ...referralForm, email: e.target.value })} placeholder="friend@example.com" />
+              <Input type="email" value={referralForm.email} onChange={(e) => setReferralForm({ ...referralForm, email: e.target.value })} />
             </div>
-            <div>
+            <div className="space-y-2">
               <Label>Friend's Phone (Optional)</Label>
-              <Input value={referralForm.phone} onChange={(e) => setReferralForm({ ...referralForm, phone: e.target.value })} placeholder="+91 9876543210" />
+              <Input value={referralForm.phone} onChange={(e) => setReferralForm({ ...referralForm, phone: e.target.value })} />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowReferralDialog(false)}>Cancel</Button>
-            <Button className="bg-purple-500 hover:bg-purple-600" onClick={handleCreateReferral} disabled={loading}>
-              {loading ? 'Sending...' : 'Send Invitation'}
-            </Button>
+            <Button onClick={handleCreateReferral}>Send Invitation</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

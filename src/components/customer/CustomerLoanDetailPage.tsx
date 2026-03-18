@@ -11,17 +11,18 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Textarea } from '@/components/ui/textarea';
 import { 
   ArrowLeft, Wallet, Calendar, Clock, IndianRupee, Percent, CreditCard, 
   CheckCircle, AlertCircle, AlertTriangle, ChevronRight, Loader2,
-  CalendarClock, TrendingUp, FileText, Building2, Phone, Mail
+  CalendarClock, TrendingUp, FileText, Building2, Phone, Mail,
+  QrCode, Copy, Upload, Image as ImageIcon, Info
 } from 'lucide-react';
 import { formatCurrency, formatDate } from '@/utils/helpers';
 import { toast } from '@/hooks/use-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
-
-import { Building2 as Building2Icon } from 'lucide-react';
 
 interface EMISchedule {
   id: string;
@@ -44,6 +45,26 @@ interface EMISchedule {
   nextPaymentDate?: string;
   isInterestOnly?: boolean;
   principalDeferred?: boolean;
+  partialPaymentCount?: number;
+  remainingAmount?: number;
+}
+
+interface PaymentSettings {
+  enableFullPayment: boolean;
+  enablePartialPayment: boolean;
+  enableInterestOnly: boolean;
+  maxPartialPayments: number;
+  maxInterestOnlyPerLoan: number;
+  companyUpiId?: string;
+  companyQrCodeUrl?: string;
+  collectionBankAccountId?: string;
+}
+
+interface BankDetails {
+  bankName: string;
+  accountNumber: string;
+  ifscCode: string;
+  accountHolderName: string;
 }
 
 interface SessionForm {
@@ -85,17 +106,22 @@ export default function CustomerLoanDetailPage() {
   const [emiSchedules, setEmiSchedules] = useState<EMISchedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedEmi, setSelectedEmi] = useState<EMISchedule | null>(null);
+  const [paymentSettings, setPaymentSettings] = useState<PaymentSettings | null>(null);
+  const [bankDetails, setBankDetails] = useState<BankDetails | null>(null);
   
   // Payment dialogs
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
-  const [showPartialDialog, setShowPartialDialog] = useState(false);
-  const [showInterestOnlyDialog, setShowInterestOnlyDialog] = useState(false);
+  const [showPaymentPage, setShowPaymentPage] = useState(false);
   const [paymentLoading, setPaymentLoading] = useState(false);
+  const [selectedPaymentType, setSelectedPaymentType] = useState<'FULL_EMI' | 'PARTIAL' | 'INTEREST_ONLY'>('FULL_EMI');
   
   // Payment forms
   const [partialAmount, setPartialAmount] = useState('');
   const [nextPaymentDate, setNextPaymentDate] = useState('');
-  const [paymentRemarks, setPaymentRemarks] = useState('');
+  const [utrNumber, setUtrNumber] = useState('');
+  const [proofFile, setProofFile] = useState<File | null>(null);
+  const [proofPreview, setProofPreview] = useState<string | null>(null);
+  const [uploadingProof, setUploadingProof] = useState(false);
 
   const fetchLoanDetails = useCallback(async () => {
     if (!loanId) return;
@@ -123,158 +149,189 @@ export default function CustomerLoanDetailPage() {
     }
   }, [loanId]);
 
+  // Fetch payment settings
+  const fetchPaymentSettings = useCallback(async () => {
+    if (!loanId) return;
+    try {
+      const response = await fetch(`/api/payment-request?action=settings&loanApplicationId=${loanId}`);
+      const data = await response.json();
+      if (data.success && data.settings) {
+        setPaymentSettings(data.settings);
+      }
+    } catch (error) {
+      console.error('Error fetching payment settings:', error);
+    }
+  }, [loanId]);
+
   useEffect(() => {
     fetchLoanDetails();
-  }, [fetchLoanDetails]);
+    fetchPaymentSettings();
+  }, [fetchLoanDetails, fetchPaymentSettings]);
 
-  // Full EMI Payment
-  const handleFullPayment = async () => {
-    if (!selectedEmi) {
-      toast({ title: 'Error', description: 'No EMI selected', variant: 'destructive' });
-      return;
-    }
-    if (!user) {
-      toast({ title: 'Error', description: 'Please log in to make payment', variant: 'destructive' });
-      return;
-    }
-    if (!loanId) {
-      toast({ title: 'Error', description: 'Loan ID is missing', variant: 'destructive' });
-      return;
-    }
-
-    setPaymentLoading(true);
-    console.log('Processing full payment:', { loanId, customerId: user.id, emiScheduleId: selectedEmi.id, amount: selectedEmi.totalAmount });
+  // Handle proof file upload
+  const handleProofUpload = async (file: File): Promise<string | null> => {
+    if (!file) return null;
     
+    setUploadingProof(true);
     try {
-      const response = await fetch('/api/customer/payment', {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', 'emi_proof');
+      
+      const response = await fetch('/api/upload/document', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          loanId: loanId,
-          customerId: user.id,
-          emiScheduleId: selectedEmi.id,
-          paymentType: 'FULL_EMI',
-          amount: selectedEmi.totalAmount
-        })
+        body: formData
       });
       
       const data = await response.json();
-      console.log('Payment response:', data);
-      
-      if (response.ok) {
-        toast({ title: 'Payment Successful', description: 'Your EMI payment has been processed!' });
-        setShowPaymentDialog(false);
-        setSelectedEmi(null);
-        fetchLoanDetails();
-      } else {
-        toast({ title: 'Error', description: data.error || 'Payment failed', variant: 'destructive' });
+      if (data.success && data.url) {
+        return data.url;
       }
+      throw new Error(data.error || 'Upload failed');
     } catch (error) {
-      console.error('Payment error:', error);
-      toast({ title: 'Error', description: 'Payment failed. Please try again.', variant: 'destructive' });
+      console.error('Error uploading proof:', error);
+      toast({ title: 'Upload Error', description: 'Failed to upload proof', variant: 'destructive' });
+      return null;
     } finally {
-      setPaymentLoading(false);
+      setUploadingProof(false);
     }
   };
 
-  // Partial Payment with Date Shift
-  const handlePartialPayment = async () => {
-    if (!selectedEmi || !user || !partialAmount || !nextPaymentDate || !loanId) {
-      toast({ title: 'Error', description: 'Please fill all required fields', variant: 'destructive' });
-      return;
-    }
-    
-    const amount = parseFloat(partialAmount);
-    if (isNaN(amount) || amount <= 0) {
-      toast({ title: 'Error', description: 'Please enter a valid amount', variant: 'destructive' });
-      return;
-    }
-    if (amount >= selectedEmi.totalAmount) {
-      toast({ title: 'Error', description: 'Partial amount must be less than total EMI', variant: 'destructive' });
-      return;
-    }
-
-    setPaymentLoading(true);
-    try {
-      const response = await fetch('/api/customer/payment', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          loanId: loanId,
-          customerId: user.id,
-          emiScheduleId: selectedEmi.id,
-          paymentType: 'PARTIAL',
-          amount: amount,
-          nextPaymentDate: nextPaymentDate,
-          remarks: paymentRemarks
-        })
-      });
-      
-      const data = await response.json();
-      
-      if (response.ok) {
-        toast({ 
-          title: 'Partial Payment Successful', 
-          description: `Payment of ${formatCurrency(amount)} processed. Remaining due on ${formatDate(nextPaymentDate)}` 
-        });
-        setShowPartialDialog(false);
-        setPartialAmount('');
-        setNextPaymentDate('');
-        setPaymentRemarks('');
-        setSelectedEmi(null);
-        fetchLoanDetails();
-      } else {
-        toast({ title: 'Error', description: data.error || 'Payment failed', variant: 'destructive' });
-      }
-    } catch (error) {
-      console.error('Partial payment error:', error);
-      toast({ title: 'Error', description: 'Payment failed', variant: 'destructive' });
-    } finally {
-      setPaymentLoading(false);
-    }
-  };
-
-  // Interest Only Payment
-  const handleInterestOnlyPayment = async () => {
+  // Submit payment request
+  const handleSubmitPayment = async () => {
     if (!selectedEmi || !user || !loanId) {
       toast({ title: 'Error', description: 'Missing required information', variant: 'destructive' });
       return;
     }
 
+    // Validate based on payment type
+    if (selectedPaymentType === 'PARTIAL') {
+      if (!partialAmount || parseFloat(partialAmount) <= 0) {
+        toast({ title: 'Error', description: 'Please enter a valid partial amount', variant: 'destructive' });
+        return;
+      }
+      if (parseFloat(partialAmount) >= selectedEmi.totalAmount) {
+        toast({ title: 'Error', description: 'Partial amount must be less than total EMI', variant: 'destructive' });
+        return;
+      }
+      if (!nextPaymentDate) {
+        toast({ title: 'Error', description: 'Please select a date for remaining payment', variant: 'destructive' });
+        return;
+      }
+      // Validate date is after original due date
+      const newDate = new Date(nextPaymentDate);
+      const dueDate = new Date(selectedEmi.dueDate);
+      if (newDate <= dueDate) {
+        toast({ title: 'Error', description: 'New date must be after the original due date', variant: 'destructive' });
+        return;
+      }
+    }
+
+    if (!utrNumber) {
+      toast({ title: 'Error', description: 'Please enter UTR/Reference number', variant: 'destructive' });
+      return;
+    }
+
+    if (!proofFile && !proofPreview) {
+      toast({ title: 'Error', description: 'Please upload payment proof screenshot', variant: 'destructive' });
+      return;
+    }
+
     setPaymentLoading(true);
     try {
-      const response = await fetch('/api/customer/payment', {
+      // Upload proof first
+      let proofUrl = proofPreview;
+      if (proofFile) {
+        proofUrl = await handleProofUpload(proofFile);
+        if (!proofUrl) {
+          setPaymentLoading(false);
+          return;
+        }
+      }
+
+      // Calculate amounts based on payment type
+      let requestedAmount = selectedEmi.totalAmount;
+      let partialAmt = null;
+      let remainingAmt = null;
+      let newDue = null;
+
+      if (selectedPaymentType === 'PARTIAL') {
+        partialAmt = parseFloat(partialAmount);
+        remainingAmt = selectedEmi.totalAmount - partialAmt;
+        newDue = nextPaymentDate;
+        requestedAmount = partialAmt;
+      } else if (selectedPaymentType === 'INTEREST_ONLY') {
+        requestedAmount = selectedEmi.interestAmount;
+      }
+
+      // Create payment request
+      const response = await fetch('/api/payment-request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          loanId: loanId,
-          customerId: user.id,
+          loanApplicationId: loanId,
           emiScheduleId: selectedEmi.id,
-          paymentType: 'INTEREST_ONLY',
-          amount: selectedEmi.interestAmount,
-          remarks: paymentRemarks || 'Interest only payment - principal deferred'
+          customerId: user.id,
+          paymentType: selectedPaymentType,
+          requestedAmount,
+          partialAmount: partialAmt,
+          remainingAmount: remainingAmt,
+          newDueDate: newDue,
+          paymentMethod: 'UPI',
+          utrNumber,
+          proofUrl,
+          proofFileName: proofFile?.name
         })
       });
-      
+
       const data = await response.json();
-      
+
       if (response.ok) {
         toast({ 
-          title: 'Interest Payment Successful', 
-          description: `Interest of ${formatCurrency(selectedEmi.interestAmount)} paid. Principal shifted to next EMI.` 
+          title: 'Payment Request Submitted', 
+          description: 'Your payment is being verified. You will be notified once approved.' 
         });
-        setShowInterestOnlyDialog(false);
-        setPaymentRemarks('');
+        setShowPaymentPage(false);
+        setShowPaymentDialog(false);
+        resetPaymentForm();
         setSelectedEmi(null);
         fetchLoanDetails();
       } else {
-        toast({ title: 'Error', description: data.error || 'Payment failed', variant: 'destructive' });
+        toast({ title: 'Error', description: data.error || 'Failed to submit payment request', variant: 'destructive' });
       }
     } catch (error) {
-      console.error('Interest only payment error:', error);
-      toast({ title: 'Error', description: 'Payment failed', variant: 'destructive' });
+      console.error('Payment error:', error);
+      toast({ title: 'Error', description: 'Failed to submit payment request', variant: 'destructive' });
     } finally {
       setPaymentLoading(false);
+    }
+  };
+
+  const resetPaymentForm = () => {
+    setPartialAmount('');
+    setNextPaymentDate('');
+    setUtrNumber('');
+    setProofFile(null);
+    setProofPreview(null);
+    setSelectedPaymentType('FULL_EMI');
+  };
+
+  // Copy to clipboard
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast({ title: 'Copied!', description: 'Copied to clipboard' });
+  };
+
+  // Handle file selection
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setProofFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setProofPreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -284,6 +341,7 @@ export default function CustomerLoanDetailPage() {
       PAID: { className: 'bg-emerald-100 text-emerald-700', label: 'Paid' },
       OVERDUE: { className: 'bg-red-100 text-red-700', label: 'Overdue' },
       PARTIALLY_PAID: { className: 'bg-orange-100 text-orange-700', label: 'Partial' },
+      INTEREST_ONLY_PAID: { className: 'bg-purple-100 text-purple-700', label: 'Interest Paid' },
     };
     const c = config[status] || { className: 'bg-gray-100 text-gray-700', label: status };
     return <Badge className={c.className}>{c.label}</Badge>;
@@ -299,19 +357,15 @@ export default function CustomerLoanDetailPage() {
 
   // Sequential EMI Payment - Check if this EMI can be paid
   const canPayEmi = (emi: EMISchedule) => {
-    // If already paid, no need to pay
     if (emi.paymentStatus === 'PAID') return { canPay: false, reason: 'Already paid' };
     
-    // Find the first unpaid EMI
     const sortedEmis = [...emiSchedules].sort((a, b) => a.installmentNumber - b.installmentNumber);
     const firstUnpaidEmi = sortedEmis.find(e => e.paymentStatus !== 'PAID');
     
-    // If this is the first unpaid EMI, allow payment
     if (firstUnpaidEmi && firstUnpaidEmi.id === emi.id) {
       return { canPay: true, reason: '' };
     }
     
-    // If trying to pay an EMI before the first unpaid one
     if (firstUnpaidEmi && emi.installmentNumber > firstUnpaidEmi.installmentNumber) {
       return { 
         canPay: false, 
@@ -322,10 +376,32 @@ export default function CustomerLoanDetailPage() {
     return { canPay: true, reason: '' };
   };
 
-  // Get first unpaid EMI for sequential payment
   const getFirstUnpaidEmi = () => {
     const sortedEmis = [...emiSchedules].sort((a, b) => a.installmentNumber - b.installmentNumber);
     return sortedEmis.find(e => e.paymentStatus !== 'PAID');
+  };
+
+  // Get min date for partial payment (must be after due date)
+  const getMinPartialDate = () => {
+    if (!selectedEmi) return new Date().toISOString().split('T')[0];
+    const dueDate = new Date(selectedEmi.dueDate);
+    dueDate.setDate(dueDate.getDate() + 1);
+    return dueDate.toISOString().split('T')[0];
+  };
+
+  // Get max date for partial payment (before next EMI due date)
+  const getMaxPartialDate = () => {
+    if (!selectedEmi) return '';
+    const nextEmi = emiSchedules.find(e => e.installmentNumber === selectedEmi.installmentNumber + 1);
+    if (nextEmi) {
+      const nextDue = new Date(nextEmi.dueDate);
+      nextDue.setDate(nextDue.getDate() - 1);
+      return nextDue.toISOString().split('T')[0];
+    }
+    // If no next EMI, allow up to 30 days
+    const maxDate = new Date(selectedEmi.dueDate);
+    maxDate.setDate(maxDate.getDate() + 30);
+    return maxDate.toISOString().split('T')[0];
   };
 
   if (loading) {
@@ -498,7 +574,7 @@ export default function CustomerLoanDetailPage() {
               <>
                 <Separator className="my-4" />
                 <div className="flex items-center gap-3">
-                  <Building2Icon className="h-5 w-5 text-gray-400" />
+                  <Building2 className="h-5 w-5 text-gray-400" />
                   <div>
                     <p className="text-sm text-gray-500">Lender</p>
                     <p className="font-semibold">{loan.company.name}</p>
@@ -509,7 +585,7 @@ export default function CustomerLoanDetailPage() {
           </CardContent>
         </Card>
 
-        {/* EMI Schedule - Customer sees only EMI numbers, no money */}
+        {/* EMI Schedule */}
         <Card className="border-0 shadow-sm">
           <CardHeader>
             <CardTitle className="text-lg">EMI Schedule</CardTitle>
@@ -522,6 +598,7 @@ export default function CustomerLoanDetailPage() {
                   const isPaid = emi.paymentStatus === 'PAID';
                   const isOverdue = emi.paymentStatus === 'OVERDUE';
                   const isPartial = emi.paymentStatus === 'PARTIALLY_PAID';
+                  const isInterestPaid = emi.paymentStatus === 'INTEREST_ONLY_PAID';
                   const { canPay, reason } = canPayEmi(emi);
                   const firstUnpaid = getFirstUnpaidEmi();
                   const isNextToPay = firstUnpaid && firstUnpaid.id === emi.id;
@@ -549,7 +626,7 @@ export default function CustomerLoanDetailPage() {
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
                           <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
-                            isPaid ? 'bg-emerald-100' : isOverdue ? 'bg-red-100' : isNextToPay ? 'bg-amber-100 ring-2 ring-amber-400' : 'bg-gray-100'
+                            isPaid ? 'bg-emerald-100' : isOverdue ? 'bg-red-100' : isInterestPaid ? 'bg-purple-100' : isNextToPay ? 'bg-amber-100 ring-2 ring-amber-400' : 'bg-gray-100'
                           }`}>
                             {isPaid ? (
                               <CheckCircle className="h-6 w-6 text-emerald-600" />
@@ -560,21 +637,29 @@ export default function CustomerLoanDetailPage() {
                             )}
                           </div>
                           <div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
                               <p className="font-semibold">EMI #{emi.installmentNumber}</p>
                               {getStatusBadge(emi.paymentStatus)}
                               {isNextToPay && !isPaid && (
                                 <Badge className="bg-amber-500 text-white text-xs">Pay Next</Badge>
                               )}
-                              {isPartial && emi.nextPaymentDate && (
-                                <span className="text-xs text-gray-500">
-                                  Next: {formatDate(emi.nextPaymentDate)}
-                                </span>
+                              {emi.isInterestOnly && (
+                                <Badge className="bg-purple-500 text-white text-xs">Interest Only</Badge>
                               )}
                             </div>
                             <p className="text-sm text-gray-500">
                               Due: {formatDate(emi.dueDate)}
                             </p>
+                            {isPartial && emi.nextPaymentDate && (
+                              <p className="text-xs text-orange-600 mt-1">
+                                Remaining: {formatCurrency(emi.remainingAmount || 0)} due on {formatDate(emi.nextPaymentDate)}
+                              </p>
+                            )}
+                            {emi.partialPaymentCount && emi.partialPaymentCount > 0 && (
+                              <p className="text-xs text-orange-500 mt-1">
+                                Partial payments: {emi.partialPaymentCount}/2
+                              </p>
+                            )}
                             {!isPaid && !canPay && (
                               <p className="text-xs text-red-500 mt-1">{reason}</p>
                             )}
@@ -582,7 +667,6 @@ export default function CustomerLoanDetailPage() {
                         </div>
                         
                         <div className="text-right">
-                          {/* Hide money amount - only show status */}
                           {isPaid && emi.paidDate && (
                             <div className="flex items-center gap-1 text-emerald-600">
                               <CheckCircle className="h-4 w-4" />
@@ -593,6 +677,12 @@ export default function CustomerLoanDetailPage() {
                             <div className="flex items-center gap-1 text-orange-600">
                               <Clock className="h-4 w-4" />
                               <span className="text-sm">Partial</span>
+                            </div>
+                          )}
+                          {isInterestPaid && (
+                            <div className="flex items-center gap-1 text-purple-600">
+                              <Percent className="h-4 w-4" />
+                              <span className="text-sm">Interest Paid</span>
                             </div>
                           )}
                           {isOverdue && emi.daysOverdue > 0 && (
@@ -624,201 +714,372 @@ export default function CustomerLoanDetailPage() {
           <DialogHeader>
             <DialogTitle>Pay EMI #{selectedEmi?.installmentNumber}</DialogTitle>
             <DialogDescription>
-              Due: {selectedEmi && formatDate(selectedEmi.dueDate)}
+              Due: {selectedEmi && formatDate(selectedEmi.dueDate)} • Amount: {selectedEmi && formatCurrency(selectedEmi.totalAmount)}
             </DialogDescription>
           </DialogHeader>
           
-          {/* Sequential payment warning */}
-          {selectedEmi && (() => {
-            const { canPay, reason } = canPayEmi(selectedEmi);
-            return !canPay ? (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
-                <div className="flex items-center gap-2 text-red-600">
-                  <AlertTriangle className="h-5 w-5" />
-                  <span className="font-medium">{reason}</span>
-                </div>
-              </div>
-            ) : null;
-          })()}
-          
           <div className="space-y-3 py-4">
             {/* Full Payment Option */}
-            <Button 
-              className="w-full h-16 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600"
-              onClick={handleFullPayment}
-              disabled={paymentLoading}
-            >
-              {paymentLoading ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
-              ) : (
+            {(!paymentSettings || paymentSettings.enableFullPayment) && (
+              <Button 
+                className="w-full h-16 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600"
+                onClick={() => {
+                  setSelectedPaymentType('FULL_EMI');
+                  setShowPaymentDialog(false);
+                  setShowPaymentPage(true);
+                }}
+              >
                 <div className="flex flex-col items-center">
                   <IndianRupee className="h-5 w-5 mb-1" />
                   <span className="font-semibold">Pay Full EMI</span>
                   <span className="text-xs opacity-80">{selectedEmi && formatCurrency(selectedEmi.totalAmount)}</span>
                 </div>
-              )}
-            </Button>
+              </Button>
+            )}
             
             <div className="text-center text-sm text-gray-500">— or choose flexible payment —</div>
             
             {/* Partial Payment Option */}
-            <Button 
-              variant="outline"
-              className="w-full h-16 border-amber-300 hover:bg-amber-50"
-              onClick={() => {
-                setShowPaymentDialog(false);
-                setShowPartialDialog(true);
-              }}
-            >
-              <div className="flex flex-col items-center">
-                <CreditCard className="h-5 w-5 mb-1 text-amber-600" />
-                <span className="font-semibold">Partial Payment</span>
-                <span className="text-xs text-gray-500">Pay part now, rest later</span>
-              </div>
-            </Button>
+            {(!paymentSettings || paymentSettings.enablePartialPayment) && selectedEmi && (selectedEmi.partialPaymentCount || 0) < 2 && (
+              <Button 
+                variant="outline"
+                className="w-full h-16 border-amber-300 hover:bg-amber-50"
+                onClick={() => {
+                  setSelectedPaymentType('PARTIAL');
+                  setShowPaymentDialog(false);
+                  setShowPaymentPage(true);
+                }}
+              >
+                <div className="flex flex-col items-center">
+                  <CreditCard className="h-5 w-5 mb-1 text-amber-600" />
+                  <span className="font-semibold">Partial Payment</span>
+                  <span className="text-xs text-gray-500">
+                    Pay part now, rest later ({2 - (selectedEmi?.partialPaymentCount || 0)} left)
+                  </span>
+                </div>
+              </Button>
+            )}
+
+            {/* Warning if partial payment count reached */}
+            {selectedEmi && (selectedEmi.partialPaymentCount || 0) >= 2 && (!paymentSettings || paymentSettings.enablePartialPayment) && (
+              <Alert className="bg-orange-50 border-orange-200">
+                <AlertCircle className="h-4 w-4 text-orange-600" />
+                <AlertDescription className="text-orange-700 text-sm">
+                  You have used both partial payments for this EMI. Full payment required.
+                </AlertDescription>
+              </Alert>
+            )}
             
             {/* Interest Only Option */}
-            <Button 
-              variant="outline"
-              className="w-full h-16 border-blue-300 hover:bg-blue-50"
-              onClick={() => {
-                setShowPaymentDialog(false);
-                setShowInterestOnlyDialog(true);
-              }}
-            >
-              <div className="flex flex-col items-center">
-                <Percent className="h-5 w-5 mb-1 text-blue-600" />
-                <span className="font-semibold">Interest Only</span>
-                <span className="text-xs text-gray-500">Pay interest, defer principal</span>
-              </div>
-            </Button>
+            {(!paymentSettings || paymentSettings.enableInterestOnly) && selectedEmi && !selectedEmi.isPartialPayment && (
+              <Button 
+                variant="outline"
+                className="w-full h-16 border-purple-300 hover:bg-purple-50"
+                onClick={() => {
+                  setSelectedPaymentType('INTEREST_ONLY');
+                  setShowPaymentDialog(false);
+                  setShowPaymentPage(true);
+                }}
+              >
+                <div className="flex flex-col items-center">
+                  <Percent className="h-5 w-5 mb-1 text-purple-600" />
+                  <span className="font-semibold">Interest Only</span>
+                  <span className="text-xs text-gray-500">
+                    Pay {selectedEmi && formatCurrency(selectedEmi.interestAmount)} interest
+                  </span>
+                </div>
+              </Button>
+            )}
+
+            {/* Info for interest only */}
+            {selectedPaymentType === 'INTEREST_ONLY' && (
+              <Alert className="bg-purple-50 border-purple-200">
+                <Info className="h-4 w-4 text-purple-600" />
+                <AlertDescription className="text-purple-700 text-xs">
+                  Principal ({selectedEmi && formatCurrency(selectedEmi.principalAmount)}) will be added as a new EMI with additional interest.
+                </AlertDescription>
+              </Alert>
+            )}
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Partial Payment Dialog */}
-      <Dialog open={showPartialDialog} onOpenChange={setShowPartialDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Partial Payment</DialogTitle>
-            <DialogDescription>
-              Pay a portion of your EMI now and schedule the remaining payment
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4 py-4">
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-              <p className="text-sm text-amber-800">
-                Total EMI: <strong>{selectedEmi && formatCurrency(selectedEmi.totalAmount)}</strong>
-              </p>
-              <p className="text-xs text-amber-600 mt-1">
-                Principal: {selectedEmi && formatCurrency(selectedEmi.principalAmount)} • 
-                Interest: {selectedEmi && formatCurrency(selectedEmi.interestAmount)}
-              </p>
-            </div>
-            
-            <div className="space-y-2">
-              <Label>Payment Amount *</Label>
-              <div className="relative">
-                <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                <Input
-                  type="number"
-                  placeholder="Enter amount"
-                  value={partialAmount}
-                  onChange={(e) => setPartialAmount(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-            </div>
-            
-            <div className="space-y-2">
-              <Label>Next Payment Date *</Label>
-              <Input
-                type="date"
-                value={nextPaymentDate}
-                onChange={(e) => setNextPaymentDate(e.target.value)}
-                min={new Date().toISOString().split('T')[0]}
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label>Remarks (Optional)</Label>
-              <Input
-                placeholder="Any notes..."
-                value={paymentRemarks}
-                onChange={(e) => setPaymentRemarks(e.target.value)}
-              />
-            </div>
+      {/* Payment Page Dialog */}
+      <Dialog open={showPaymentPage} onOpenChange={(open) => {
+        setShowPaymentPage(open);
+        if (!open) resetPaymentForm();
+      }}>
+        <DialogContent className="sm:max-w-lg max-h-[95vh] p-0">
+          {/* Header */}
+          <div className="bg-gradient-to-r from-emerald-500 to-teal-500 text-white p-6">
+            <DialogHeader>
+              <DialogTitle className="text-xl text-white">
+                {selectedPaymentType === 'FULL_EMI' && 'Full EMI Payment'}
+                {selectedPaymentType === 'PARTIAL' && 'Partial Payment'}
+                {selectedPaymentType === 'INTEREST_ONLY' && 'Interest Only Payment'}
+              </DialogTitle>
+              <DialogDescription className="text-emerald-100">
+                EMI #{selectedEmi?.installmentNumber} • {selectedEmi && formatDate(selectedEmi.dueDate)}
+              </DialogDescription>
+            </DialogHeader>
           </div>
-          
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowPartialDialog(false)}>Cancel</Button>
-            <Button 
-              className="bg-amber-500 hover:bg-amber-600"
-              onClick={handlePartialPayment}
-              disabled={paymentLoading || !partialAmount || !nextPaymentDate}
-            >
-              {paymentLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirm Partial Payment'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
-      {/* Interest Only Dialog */}
-      <Dialog open={showInterestOnlyDialog} onOpenChange={setShowInterestOnlyDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Interest Only Payment</DialogTitle>
-            <DialogDescription>
-              Pay only the interest amount and defer the principal to next month
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4 py-4">
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-blue-800">Interest Amount:</span>
-                <span className="font-bold text-blue-800 text-lg">
-                  {selectedEmi && formatCurrency(selectedEmi.interestAmount)}
-                </span>
+          <ScrollArea className="max-h-[calc(95vh-180px)]">
+            <div className="p-6 space-y-6">
+              {/* Amount Summary */}
+              <Card className="border-0 bg-gray-50">
+                <CardContent className="p-4">
+                  {selectedPaymentType === 'FULL_EMI' && (
+                    <div className="text-center">
+                      <p className="text-sm text-gray-500">Total Amount</p>
+                      <p className="text-3xl font-bold text-emerald-600">
+                        {selectedEmi && formatCurrency(selectedEmi.totalAmount)}
+                      </p>
+                      <div className="flex justify-center gap-4 mt-2 text-xs text-gray-500">
+                        <span>Principal: {selectedEmi && formatCurrency(selectedEmi.principalAmount)}</span>
+                        <span>Interest: {selectedEmi && formatCurrency(selectedEmi.interestAmount)}</span>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {selectedPaymentType === 'PARTIAL' && (
+                    <div className="space-y-4">
+                      <div className="bg-amber-50 rounded-lg p-3">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Total EMI:</span>
+                          <span className="font-medium">{selectedEmi && formatCurrency(selectedEmi.totalAmount)}</span>
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label>Amount to Pay Now *</Label>
+                        <div className="relative">
+                          <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                          <Input
+                            type="number"
+                            placeholder="Enter amount"
+                            value={partialAmount}
+                            onChange={(e) => setPartialAmount(e.target.value)}
+                            className="pl-10"
+                            max={selectedEmi?.totalAmount}
+                          />
+                        </div>
+                        {partialAmount && selectedEmi && (
+                          <p className="text-xs text-gray-500">
+                            Remaining: {formatCurrency(selectedEmi.totalAmount - parseFloat(partialAmount || '0'))}
+                          </p>
+                        )}
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label>Pay Remaining By *</Label>
+                        <Input
+                          type="date"
+                          value={nextPaymentDate}
+                          onChange={(e) => setNextPaymentDate(e.target.value)}
+                          min={getMinPartialDate()}
+                          max={getMaxPartialDate()}
+                        />
+                        <p className="text-xs text-gray-500">
+                          Must be after due date ({selectedEmi && formatDate(selectedEmi.dueDate)})
+                        </p>
+                        {selectedEmi && (selectedEmi.partialPaymentCount || 0) === 1 && (
+                          <Alert className="bg-orange-50 border-orange-200 mt-2">
+                            <AlertTriangle className="h-4 w-4 text-orange-600" />
+                            <AlertDescription className="text-orange-700 text-xs">
+                              This is your last partial payment. Remaining amount must be paid in full.
+                            </AlertDescription>
+                          </Alert>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {selectedPaymentType === 'INTEREST_ONLY' && (
+                    <div className="space-y-4">
+                      <div className="text-center">
+                        <p className="text-sm text-gray-500">Interest Amount</p>
+                        <p className="text-3xl font-bold text-purple-600">
+                          {selectedEmi && formatCurrency(selectedEmi.interestAmount)}
+                        </p>
+                      </div>
+                      <Alert className="bg-purple-50 border-purple-200">
+                        <Info className="h-4 w-4 text-purple-600" />
+                        <AlertDescription className="text-purple-700 text-sm">
+                          Principal ({selectedEmi && formatCurrency(selectedEmi.principalAmount)}) will be added as a new EMI with additional interest. Your loan tenure will increase by 1 month.
+                        </AlertDescription>
+                      </Alert>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Payment Methods */}
+              <div className="space-y-4">
+                <h3 className="font-semibold flex items-center gap-2">
+                  <Wallet className="h-5 w-5" /> Payment Methods
+                </h3>
+
+                {/* QR Code */}
+                {(paymentSettings?.companyQrCodeUrl || loan.company) && (
+                  <Card className="border-0 bg-gradient-to-br from-blue-50 to-indigo-50">
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-4">
+                        <div className="w-24 h-24 bg-white rounded-lg border flex items-center justify-center">
+                          {paymentSettings?.companyQrCodeUrl ? (
+                            <img src={paymentSettings.companyQrCodeUrl} alt="QR Code" className="w-20 h-20" />
+                          ) : (
+                            <QrCode className="h-12 w-12 text-gray-300" />
+                          )}
+                        </div>
+                        <div>
+                          <p className="font-medium">Scan QR Code</p>
+                          <p className="text-sm text-gray-500">Use any UPI app to pay</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* UPI ID */}
+                {paymentSettings?.companyUpiId && (
+                  <Card className="border-0">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm text-gray-500">UPI ID</p>
+                          <p className="font-mono font-medium text-lg">{paymentSettings.companyUpiId}</p>
+                        </div>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => copyToClipboard(paymentSettings.companyUpiId || '')}
+                        >
+                          <Copy className="h-4 w-4 mr-1" /> Copy
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Bank Details */}
+                <Card className="border-0">
+                  <CardContent className="p-4">
+                    <h4 className="font-medium mb-3 flex items-center gap-2">
+                      <Building2 className="h-4 w-4" /> Bank Account Details
+                    </h4>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Account Holder:</span>
+                        <span className="font-medium">{loan.company?.name || 'Money Mitra'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Bank Name:</span>
+                        <span className="font-medium">HDFC Bank</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Account Number:</span>
+                        <span className="font-mono">50100212345678</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">IFSC Code:</span>
+                        <span className="font-mono">HDFC0001234</span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-blue-600">Principal (deferred):</span>
-                <span className="text-blue-600">{selectedEmi && formatCurrency(selectedEmi.principalAmount)}</span>
+
+              {/* Proof Upload */}
+              <div className="space-y-4">
+                <h3 className="font-semibold flex items-center gap-2">
+                  <Upload className="h-5 w-5" /> Payment Proof
+                </h3>
+
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="utr">UTR / Reference Number *</Label>
+                    <Input
+                      id="utr"
+                      placeholder="Enter 12-digit UTR number"
+                      value={utrNumber}
+                      onChange={(e) => setUtrNumber(e.target.value)}
+                      maxLength={16}
+                    />
+                    <p className="text-xs text-gray-500">Found in your payment app after transaction</p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Payment Screenshot *</Label>
+                    <div className="border-2 border-dashed border-gray-200 rounded-lg p-4">
+                      {proofPreview ? (
+                        <div className="relative">
+                          <img 
+                            src={proofPreview} 
+                            alt="Proof preview" 
+                            className="max-h-40 mx-auto rounded-lg"
+                          />
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            className="absolute top-2 right-2"
+                            onClick={() => {
+                              setProofFile(null);
+                              setProofPreview(null);
+                            }}
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      ) : (
+                        <label className="flex flex-col items-center cursor-pointer">
+                          <Upload className="h-10 w-10 text-gray-300 mb-2" />
+                          <span className="text-sm text-gray-500">Click to upload screenshot</span>
+                          <span className="text-xs text-gray-400 mt-1">PNG, JPG up to 5MB</span>
+                          <input
+                            type="file"
+                            className="hidden"
+                            accept="image/*"
+                            onChange={handleFileChange}
+                          />
+                        </label>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
-            
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-              <p className="text-sm text-amber-800">
-                <strong>How it works:</strong>
-              </p>
-              <ul className="text-xs text-amber-700 mt-2 space-y-1 list-disc list-inside">
-                <li>You pay only the interest portion now</li>
-                <li>The principal amount is added to next month's EMI</li>
-                <li>Your EMI schedule shifts accordingly</li>
-              </ul>
+          </ScrollArea>
+
+          {/* Footer */}
+          <div className="p-4 border-t bg-gray-50">
+            <div className="flex gap-3">
+              <Button 
+                variant="outline" 
+                className="flex-1"
+                onClick={() => {
+                  setShowPaymentPage(false);
+                  resetPaymentForm();
+                }}
+              >
+                Cancel
+              </Button>
+              <Button 
+                className="flex-1 bg-emerald-500 hover:bg-emerald-600"
+                onClick={handleSubmitPayment}
+                disabled={paymentLoading || uploadingProof}
+              >
+                {paymentLoading || uploadingProof ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  'Submit Payment'
+                )}
+              </Button>
             </div>
-            
-            <div className="space-y-2">
-              <Label>Remarks (Optional)</Label>
-              <Input
-                placeholder="Any notes..."
-                value={paymentRemarks}
-                onChange={(e) => setPaymentRemarks(e.target.value)}
-              />
-            </div>
+            <p className="text-xs text-center text-gray-500 mt-2">
+              Payment will be verified by cashier before confirmation
+            </p>
           </div>
-          
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowInterestOnlyDialog(false)}>Cancel</Button>
-            <Button 
-              className="bg-blue-500 hover:bg-blue-600"
-              onClick={handleInterestOnlyPayment}
-              disabled={paymentLoading}
-            >
-              {paymentLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : `Pay ${selectedEmi && formatCurrency(selectedEmi.interestAmount)} Interest`}
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
