@@ -65,12 +65,37 @@ export default function CustomerLoginPage({ onBack }: CustomerLoginPageProps) {
 
   const handleGoogleLogin = async () => {
     setLoading(true);
-    const result = await signInWithGoogle();
-    if (result.success) {
-      toast({ title: 'Success', description: 'Login successful!' });
-      window.location.reload();
-    } else {
-      toast({ title: 'Error', description: result.error || 'Google login failed', variant: 'destructive' });
+    try {
+      const result = await signInWithGoogle();
+      if (result.success && result.user) {
+        // Sync with backend immediately
+        const syncResponse = await fetch('/api/auth/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: result.user.email,
+            firebaseUid: result.user.uid,
+            name: result.user.displayName,
+            profilePicture: result.user.photoURL,
+            phone: result.user.phoneNumber
+          })
+        });
+
+        if (syncResponse.ok) {
+          const syncData = await syncResponse.json();
+          // Store user in localStorage for immediate access
+          localStorage.setItem('demoUser', JSON.stringify(syncData.user));
+          toast({ title: 'Success', description: 'Login successful!' });
+          window.location.reload();
+        } else {
+          const errorData = await syncResponse.json();
+          toast({ title: 'Error', description: errorData.error || 'Failed to sync account', variant: 'destructive' });
+        }
+      } else {
+        toast({ title: 'Error', description: result.error || 'Google login failed', variant: 'destructive' });
+      }
+    } catch (error) {
+      toast({ title: 'Error', description: 'Something went wrong', variant: 'destructive' });
     }
     setLoading(false);
   };
