@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { cache, CACHE_KEYS } from '@/lib/cache';
 
-// GET - List all products or get single product
+// GET - List all products or get single product (CACHED)
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -18,17 +19,43 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ product });
     }
 
-    const where: Record<string, unknown> = {};
-    if (isActive === 'true') where.isActive = true;
+    // Cache active products for 30 seconds
+    if (isActive === 'true') {
+      const products = await cache.getOrSet(
+        CACHE_KEYS.CMS_SERVICES,
+        () => db.cMSService.findMany({
+          where: { isActive: true },
+          orderBy: { order: 'asc' },
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            icon: true,
+            loanType: true,
+            minInterestRate: true,
+            maxInterestRate: true,
+            defaultInterestRate: true,
+            minTenure: true,
+            maxTenure: true,
+            defaultTenure: true,
+            minAmount: true,
+            maxAmount: true,
+            processingFeePercent: true,
+            isActive: true,
+            order: true
+          }
+        }),
+        30000
+      );
+      return NextResponse.json({ products });
+    }
 
     const products = await db.cMSService.findMany({
-      where,
       orderBy: { order: 'asc' }
     });
 
     return NextResponse.json({ products });
   } catch (error) {
-    console.error('Error fetching products:', error);
     return NextResponse.json({ error: 'Failed to fetch products' }, { status: 500 });
   }
 }
@@ -53,7 +80,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Title and description are required' }, { status: 400 });
     }
 
-    // Get max order for new product
     const maxOrder = await db.cMSService.aggregate({
       _max: { order: true }
     });
@@ -87,9 +113,11 @@ export async function POST(request: NextRequest) {
       }
     });
 
+    // Clear cache
+    cache.delete(CACHE_KEYS.CMS_SERVICES);
+
     return NextResponse.json({ success: true, product });
   } catch (error) {
-    console.error('Error creating product:', error);
     return NextResponse.json({ error: 'Failed to create product' }, { status: 500 });
   }
 }
@@ -105,8 +133,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const updateData: Record<string, unknown> = {};
-    
-    // Only update fields that are provided
+
     const numericFields = [
       'minInterestRate', 'maxInterestRate', 'defaultInterestRate',
       'minTenure', 'maxTenure', 'defaultTenure',
@@ -115,9 +142,9 @@ export async function PUT(request: NextRequest) {
       'latePaymentPenaltyPercent', 'gracePeriodDays', 'bounceCharges',
       'maxMoratoriumMonths', 'prepaymentCharges', 'order'
     ];
-    
+
     const intFields = ['minTenure', 'maxTenure', 'defaultTenure', 'gracePeriodDays', 'maxMoratoriumMonths', 'order'];
-    
+
     for (const [key, value] of Object.entries(data)) {
       if (value !== undefined) {
         if (numericFields.includes(key)) {
@@ -135,9 +162,11 @@ export async function PUT(request: NextRequest) {
       data: updateData
     });
 
+    // Clear cache
+    cache.delete(CACHE_KEYS.CMS_SERVICES);
+
     return NextResponse.json({ success: true, product });
   } catch (error) {
-    console.error('Error updating product:', error);
     return NextResponse.json({ error: 'Failed to update product' }, { status: 500 });
   }
 }
@@ -156,9 +185,11 @@ export async function DELETE(request: NextRequest) {
       where: { id }
     });
 
+    // Clear cache
+    cache.delete(CACHE_KEYS.CMS_SERVICES);
+
     return NextResponse.json({ success: true, message: 'Product deleted successfully' });
   } catch (error) {
-    console.error('Error deleting product:', error);
     return NextResponse.json({ error: 'Failed to delete product' }, { status: 500 });
   }
 }

@@ -1,10 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { cache, CACHE_KEYS } from '@/lib/cache';
 
 export async function GET() {
   try {
-    const settings = await db.systemSetting.findMany();
-    
+    // Use cache for settings (cache for 60 seconds)
+    const settings = await cache.getOrSet(
+      CACHE_KEYS.SETTINGS,
+      async () => {
+        const result = await db.systemSetting.findMany({
+          select: { key: true, value: true }
+        });
+        return result;
+      },
+      60000 // 1 minute cache
+    );
+
     const settingsObj: Record<string, string> = {};
     for (const setting of settings) {
       settingsObj[setting.key] = setting.value;
@@ -25,13 +36,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Settings object is required' }, { status: 400 });
     }
 
-    for (const [key, value] of Object.entries(settings)) {
-      await db.systemSetting.upsert({
+    // Batch upsert using transaction
+    const updates = Object.entries(settings).map(([key, value]) =>
+      db.systemSetting.upsert({
         where: { key },
         update: { value: String(value) },
         create: { key, value: String(value) }
-      });
-    }
+      })
+    );
+
+    await db.$transaction(updates);
+
+    // Clear cache after update
+    cache.delete(CACHE_KEYS.SETTINGS);
 
     return NextResponse.json({ success: true, message: 'Settings saved successfully' });
   } catch (error) {
