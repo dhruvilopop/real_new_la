@@ -3,8 +3,5 @@
   "devCommand": "bun run dev",
   "installCommand": "bun install",
   "framework": "nextjs",
-  "regions": ["sin1"],
-  "env": {
-    "DATABASE_URL": "@database_url"
-  }
+  "regions": ["sin1"]
 }
