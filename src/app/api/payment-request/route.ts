@@ -218,7 +218,7 @@ export async function POST(request: NextRequest) {
         }, { status: 400 });
       }
 
-      // Validate date - must be after original due date
+      // Validate date - must be after original due date and before next EMI due date
       if (newDueDate) {
         const newDate = new Date(newDueDate);
         const dueDate = new Date(emi.dueDate);
@@ -227,6 +227,23 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ 
             error: 'New due date must be after the original due date' 
           }, { status: 400 });
+        }
+
+        // Check if new date is before the next EMI's due date
+        const nextEMI = await db.eMISchedule.findFirst({
+          where: { 
+            loanApplicationId,
+            installmentNumber: emi.installmentNumber + 1
+          }
+        });
+
+        if (nextEMI) {
+          const nextDueDate = new Date(nextEMI.dueDate);
+          if (newDate >= nextDueDate) {
+            return NextResponse.json({ 
+              error: 'New due date must be before the next EMI due date (' + nextDueDate.toLocaleDateString() + ')' 
+            }, { status: 400 });
+          }
         }
       }
 
