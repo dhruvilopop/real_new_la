@@ -80,6 +80,9 @@ export async function POST(request: NextRequest) {
       accountType,
       openingBalance = 0,
       isDefault = false,
+      // Payment settings
+      upiId,
+      qrCodeUrl,
     } = body;
 
     // Get or create a valid company ID
@@ -113,11 +116,13 @@ export async function POST(request: NextRequest) {
         accountName: accountName || bankName,
         branchName,
         ifscCode,
-        accountType: accountType || 'SAVINGS',
+        accountType: accountType || 'CURRENT',
         openingBalance,
         currentBalance: openingBalance,
         isDefault,
         isActive: true,
+        upiId,
+        qrCodeUrl,
       },
     });
 
@@ -132,7 +137,7 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const { id, bankName, accountName, branchName, ifscCode, isDefault, isActive } = body;
+    const { id, bankName, accountName, branchName, ifscCode, isDefault, isActive, upiId, qrCodeUrl } = body;
 
     const bankAccount = await db.bankAccount.findUnique({ where: { id } });
     if (!bankAccount) {
@@ -156,6 +161,8 @@ export async function PUT(request: NextRequest) {
         ifscCode,
         isDefault,
         isActive,
+        upiId,
+        qrCodeUrl,
       },
     });
 

@@ -237,7 +237,8 @@ export default function AccountantDashboard() {
   });
   
   const [newBankData, setNewBankData] = useState({
-    bankName: '', accountNumber: '', accountName: '', ifscCode: '', accountType: 'SAVINGS', openingBalance: 0
+    bankName: '', accountNumber: '', accountName: '', ifscCode: '', accountType: 'CURRENT', openingBalance: 0,
+    upiId: '', qrCodeUrl: '', isDefault: false
   });
 
   // Menu items for accountant
@@ -548,7 +549,7 @@ export default function AccountantDashboard() {
   };
 
   const resetBankForm = () => {
-    setNewBankData({ bankName: '', accountNumber: '', accountName: '', ifscCode: '', accountType: 'SAVINGS', openingBalance: 0 });
+    setNewBankData({ bankName: '', accountNumber: '', accountName: '', ifscCode: '', accountType: 'CURRENT', openingBalance: 0, upiId: '', qrCodeUrl: '', isDefault: false });
   };
 
   const confirmDelete = (type: string, id: string, name: string) => {
@@ -2417,8 +2418,8 @@ export default function AccountantDashboard() {
                 <Select value={newBankData.accountType} onValueChange={(val) => setNewBankData({ ...newBankData, accountType: val })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="SAVINGS">Savings</SelectItem>
                     <SelectItem value="CURRENT">Current</SelectItem>
+                    <SelectItem value="SAVINGS">Savings</SelectItem>
                     <SelectItem value="OVERDRAFT">Overdraft</SelectItem>
                   </SelectContent>
                 </Select>
@@ -2428,9 +2429,37 @@ export default function AccountantDashboard() {
                 <Input value={newBankData.ifscCode} onChange={(e) => setNewBankData({ ...newBankData, ifscCode: e.target.value })} />
               </div>
             </div>
-            <div>
-              <Label>Opening Balance</Label>
-              <Input type="number" value={newBankData.openingBalance || ''} onChange={(e) => setNewBankData({ ...newBankData, openingBalance: parseFloat(e.target.value) || 0 })} />
+            <div className="border-t pt-4 mt-2">
+              <h4 className="font-medium mb-3 flex items-center gap-2">
+                <CreditCard className="h-4 w-4" /> Payment Settings (for Customer Payment Page)
+              </h4>
+              <div className="space-y-3">
+                <div>
+                  <Label>UPI ID</Label>
+                  <Input placeholder="e.g., company@upi" value={newBankData.upiId} onChange={(e) => setNewBankData({ ...newBankData, upiId: e.target.value })} />
+                </div>
+                <div>
+                  <Label>QR Code URL</Label>
+                  <Input placeholder="https://..." value={newBankData.qrCodeUrl} onChange={(e) => setNewBankData({ ...newBankData, qrCodeUrl: e.target.value })} />
+                </div>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Opening Balance</Label>
+                <Input type="number" value={newBankData.openingBalance || ''} onChange={(e) => setNewBankData({ ...newBankData, openingBalance: parseFloat(e.target.value) || 0 })} />
+              </div>
+              <div className="flex items-end pb-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={newBankData.isDefault}
+                    onChange={(e) => setNewBankData({ ...newBankData, isDefault: e.target.checked })}
+                    className="h-4 w-4 rounded border-gray-300"
+                  />
+                  <span className="text-sm font-medium">Set as Default Account</span>
+                </label>
+              </div>
             </div>
           </div>
           <DialogFooter>
