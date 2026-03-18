@@ -174,7 +174,12 @@ export default function CustomerLoanDetailPage() {
 
   // Handle proof file upload
   const handleProofUpload = async (file: File): Promise<string | null> => {
-    if (!file) return null;
+    console.log('handleProofUpload called with file:', file?.name, 'size:', file?.size, 'type:', file?.type);
+    
+    if (!file) {
+      console.log('handleProofUpload: No file provided');
+      return null;
+    }
     
     setUploadingProof(true);
     try {
@@ -182,42 +187,39 @@ export default function CustomerLoanDetailPage() {
       formData.append('file', file);
       formData.append('documentType', 'emi_proof');
       
+      console.log('Uploading proof to /api/upload/document...');
+      
       const response = await fetch('/api/upload/document', {
         method: 'POST',
         body: formData
       });
       
+      console.log('Upload response status:', response.status);
+      
       const data = await response.json();
+      console.log('Upload response data:', data);
+      
       if (data.success && data.url) {
+        console.log('Upload successful, URL:', data.url);
         return data.url;
       }
+      
+      console.log('Upload failed:', data.error);
       throw new Error(data.error || 'Upload failed');
     } catch (error) {
       console.error('Error uploading proof:', error);
-      toast({ title: 'Upload Error', description: 'Failed to upload proof', variant: 'destructive' });
+      toast({ title: 'Upload Error', description: `Failed to upload proof: ${(error as Error).message}`, variant: 'destructive' });
       return null;
     } finally {
       setUploadingProof(false);
+      console.log('handleProofUpload completed');
     }
   };
 
   // Submit payment request
   const handleSubmitPayment = async () => {
-    // Debug: Show all form values
-    alert(`Debug Info:
-- EMI ID: ${selectedEmi?.id || 'MISSING'}
-- User ID: ${user?.id || 'MISSING'}
-- Loan ID: ${loanId || 'MISSING'}
-- Payment Type: ${selectedPaymentType}
-- Partial Amount: ${partialAmount || 'EMPTY'}
-- Next Payment Date: ${nextPaymentDate || 'EMPTY'}
-- UTR Number: ${utrNumber || 'EMPTY'}
-- Proof File: ${proofFile?.name || 'NONE'}
-- Proof Preview: ${proofPreview ? 'EXISTS' : 'NONE'}
-- Payment Loading: ${paymentLoading}
-- Uploading Proof: ${uploadingProof}`);
-
-    console.log('handleSubmitPayment called', {
+    console.log('=== handleSubmitPayment STARTED ===');
+    console.log('Form values:', {
       selectedEmi: selectedEmi?.id,
       user: user?.id,
       loanId,
@@ -226,67 +228,106 @@ export default function CustomerLoanDetailPage() {
       nextPaymentDate,
       utrNumber,
       proofFile: proofFile?.name,
-      proofPreview: proofPreview ? 'exists' : null
+      proofPreview: proofPreview ? 'exists' : null,
+      paymentLoading,
+      uploadingProof
     });
 
+    // Validate required info
     if (!selectedEmi || !user || !loanId) {
-      console.log('Missing required info:', { selectedEmi, user, loanId });
-      toast({ title: 'Error', description: 'Missing required information', variant: 'destructive' });
+      console.log('VALIDATION FAILED: Missing required info');
+      toast({ title: 'Error', description: 'Missing required information. Please try again.', variant: 'destructive' });
       return;
     }
 
     // Validate based on payment type
     if (selectedPaymentType === 'PARTIAL') {
-      console.log('Validating PARTIAL payment');
-      if (!partialAmount || parseFloat(partialAmount) <= 0) {
-        console.log('Invalid partial amount:', partialAmount);
+      console.log('Validating PARTIAL payment...');
+      
+      const partialNum = parseFloat(partialAmount);
+      console.log('Partial amount parsed:', partialNum);
+      
+      if (!partialAmount || isNaN(partialNum) || partialNum <= 0) {
+        console.log('VALIDATION FAILED: Invalid partial amount');
         toast({ title: 'Error', description: 'Please enter a valid partial amount', variant: 'destructive' });
         return;
       }
-      if (parseFloat(partialAmount) >= selectedEmi.totalAmount) {
-        console.log('Partial amount >= total:', partialAmount, selectedEmi.totalAmount);
-        toast({ title: 'Error', description: 'Partial amount must be less than total EMI', variant: 'destructive' });
+      
+      if (partialNum >= selectedEmi.totalAmount) {
+        console.log('VALIDATION FAILED: Partial amount >= total');
+        toast({ title: 'Error', description: 'Partial amount must be less than total EMI amount', variant: 'destructive' });
         return;
       }
+      
       if (!nextPaymentDate) {
-        console.log('Missing nextPaymentDate');
+        console.log('VALIDATION FAILED: Missing next payment date');
         toast({ title: 'Error', description: 'Please select a date for remaining payment', variant: 'destructive' });
         return;
       }
+      
       // Validate date is after original due date
-      const newDate = new Date(nextPaymentDate);
+      const newDate = new Date(nextPaymentDate + 'T00:00:00');
       const dueDate = new Date(selectedEmi.dueDate);
-      console.log('Date validation:', { newDate, dueDate, isValid: newDate > dueDate });
+      console.log('Date validation:', { 
+        nextPaymentDate, 
+        newDate: newDate.toISOString(), 
+        dueDate: dueDate.toISOString(), 
+        isValid: newDate > dueDate 
+      });
+      
       if (newDate <= dueDate) {
+        console.log('VALIDATION FAILED: Date not after due date');
         toast({ title: 'Error', description: 'New date must be after the original due date', variant: 'destructive' });
         return;
       }
+      console.log('PARTIAL payment validation PASSED');
     }
 
-    if (!utrNumber) {
-      console.log('Missing UTR number');
+    if (!utrNumber || utrNumber.trim() === '') {
+      console.log('VALIDATION FAILED: Missing UTR number');
       toast({ title: 'Error', description: 'Please enter UTR/Reference number', variant: 'destructive' });
       return;
     }
 
     if (!proofFile && !proofPreview) {
-      console.log('Missing proof file');
+      console.log('VALIDATION FAILED: Missing proof file');
       toast({ title: 'Error', description: 'Please upload payment proof screenshot', variant: 'destructive' });
       return;
     }
 
-    console.log('All validations passed, submitting...');
+    console.log('=== ALL VALIDATIONS PASSED ===');
+    console.log('Starting payment submission...');
 
     setPaymentLoading(true);
     try {
-      // Upload proof first
-      let proofUrl = proofPreview;
+      // Upload proof first if there's a file
+      let proofUrl = null;
+      
       if (proofFile) {
-        proofUrl = await handleProofUpload(proofFile);
-        if (!proofUrl) {
+        console.log('Proof file exists, uploading...');
+        try {
+          proofUrl = await handleProofUpload(proofFile);
+          if (!proofUrl) {
+            console.log('Proof upload returned null');
+            setPaymentLoading(false);
+            return;
+          }
+          console.log('Proof uploaded successfully, URL:', proofUrl);
+        } catch (uploadError) {
+          console.error('Proof upload error:', uploadError);
           setPaymentLoading(false);
+          toast({ title: 'Error', description: 'Failed to upload proof. Please try again.', variant: 'destructive' });
           return;
         }
+      } else if (proofPreview) {
+        // If no file but preview exists, something went wrong
+        console.log('No proof file but preview exists - this should not happen');
+        proofUrl = proofPreview;
+      } else {
+        console.log('No proof file or preview');
+        setPaymentLoading(false);
+        toast({ title: 'Error', description: 'Please upload payment proof', variant: 'destructive' });
+        return;
       }
 
       // Calculate amounts based on payment type
@@ -298,35 +339,54 @@ export default function CustomerLoanDetailPage() {
       if (selectedPaymentType === 'PARTIAL') {
         partialAmt = parseFloat(partialAmount);
         remainingAmt = selectedEmi.totalAmount - partialAmt;
-        newDue = new Date(nextPaymentDate);
+        newDue = new Date(nextPaymentDate + 'T00:00:00');
         requestedAmount = partialAmt;
       } else if (selectedPaymentType === 'INTEREST_ONLY') {
         requestedAmount = selectedEmi.interestAmount;
       }
 
-      // Create payment request
-      const response = await fetch('/api/payment-request', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          loanApplicationId: loanId,
-          emiScheduleId: selectedEmi.id,
-          customerId: user.id,
-          paymentType: selectedPaymentType === 'PARTIAL' ? 'PARTIAL_PAYMENT' : selectedPaymentType,
-          requestedAmount,
-          partialAmount: partialAmt,
-          remainingAmount: remainingAmt,
-          newDueDate: newDue,
-          paymentMethod: 'UPI',
-          utrNumber,
-          proofUrl,
-          proofFileName: proofFile?.name
-        })
-      });
+      const requestBody = {
+        loanApplicationId: loanId,
+        emiScheduleId: selectedEmi.id,
+        customerId: user.id,
+        paymentType: selectedPaymentType === 'PARTIAL' ? 'PARTIAL_PAYMENT' : selectedPaymentType,
+        requestedAmount,
+        partialAmount: partialAmt,
+        remainingAmount: remainingAmt,
+        newDueDate: newDue ? newDue.toISOString() : null,
+        paymentMethod: 'UPI',
+        utrNumber,
+        proofUrl,
+        proofFileName: proofFile?.name
+      };
+      
+      console.log('Sending API request with body:', JSON.stringify(requestBody, null, 2));
 
-      const data = await response.json();
+      // Create payment request
+      let response;
+      try {
+        response = await fetch('/api/payment-request', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody)
+        });
+        console.log('Fetch completed, response status:', response.status);
+      } catch (fetchError) {
+        console.error('FETCH ERROR:', fetchError);
+        throw new Error('Network error: Failed to connect to server');
+      }
+
+      let data;
+      try {
+        data = await response.json();
+        console.log('API Response:', { status: response.status, data });
+      } catch (jsonError) {
+        console.error('JSON PARSE ERROR:', jsonError);
+        throw new Error('Invalid server response');
+      }
 
       if (response.ok) {
+        console.log('=== PAYMENT REQUEST SUCCESS ===');
         toast({ 
           title: 'Payment Request Submitted', 
           description: 'Your payment is being verified. You will be notified once approved.' 
@@ -337,13 +397,15 @@ export default function CustomerLoanDetailPage() {
         setSelectedEmi(null);
         fetchLoanDetails();
       } else {
+        console.log('API ERROR:', data.error);
         toast({ title: 'Error', description: data.error || 'Failed to submit payment request', variant: 'destructive' });
       }
     } catch (error) {
-      console.error('Payment error:', error);
-      toast({ title: 'Error', description: 'Failed to submit payment request', variant: 'destructive' });
+      console.error('=== PAYMENT ERROR ===', error);
+      toast({ title: 'Error', description: 'Failed to submit payment request. Please try again.', variant: 'destructive' });
     } finally {
       setPaymentLoading(false);
+      console.log('handleSubmitPayment COMPLETED');
     }
   };
 
