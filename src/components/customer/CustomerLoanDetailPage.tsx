@@ -180,7 +180,7 @@ export default function CustomerLoanDetailPage() {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('type', 'emi_proof');
+      formData.append('documentType', 'emi_proof');
       
       const response = await fetch('/api/upload/document', {
         method: 'POST',

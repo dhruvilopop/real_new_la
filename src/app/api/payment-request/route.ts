@@ -169,7 +169,7 @@ export async function POST(request: NextRequest) {
     } = body;
 
     // Validate required fields
-    if (!loanApplicationId || !customerId || !paymentType || !requestedAmount) {
+    if (!loanApplicationId || !customerId || !paymentType || !requestedAmount || !emiScheduleId) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
@@ -218,40 +218,52 @@ export async function POST(request: NextRequest) {
         }, { status: 400 });
       }
 
-      // Validate date - must be after original due date and before next EMI due date
-      if (newDueDate) {
-        const newDate = new Date(newDueDate);
-        const dueDate = new Date(emi.dueDate);
-        
-        if (newDate <= dueDate) {
-          return NextResponse.json({ 
-            error: 'New due date must be after the original due date' 
-          }, { status: 400 });
-        }
-
-        // Check if new date is before the next EMI's due date
-        const nextEMI = await db.eMISchedule.findFirst({
-          where: { 
-            loanApplicationId,
-            installmentNumber: emi.installmentNumber + 1
-          }
-        });
-
-        if (nextEMI) {
-          const nextDueDate = new Date(nextEMI.dueDate);
-          if (newDate >= nextDueDate) {
-            return NextResponse.json({ 
-              error: 'New due date must be before the next EMI due date (' + nextDueDate.toLocaleDateString() + ')' 
-            }, { status: 400 });
-          }
-        }
+      // Partial amount is required
+      if (!partialAmount || partialAmount <= 0) {
+        return NextResponse.json({ 
+          error: 'Partial amount is required and must be greater than 0' 
+        }, { status: 400 });
       }
 
-      // Validate partial amount
-      if (partialAmount && partialAmount >= requestedAmount) {
+      // Partial amount must be less than total EMI
+      if (partialAmount >= emi.totalAmount) {
         return NextResponse.json({ 
-          error: 'Partial amount must be less than total EMI amount' 
+          error: 'Partial amount must be less than total EMI amount (' + emi.totalAmount + ')' 
         }, { status: 400 });
+      }
+
+      // New due date is required for partial payment
+      if (!newDueDate) {
+        return NextResponse.json({ 
+          error: 'New due date is required for partial payment' 
+        }, { status: 400 });
+      }
+
+      // Validate date - must be after original due date and before next EMI due date
+      const newDate = new Date(newDueDate);
+      const dueDate = new Date(emi.dueDate);
+      
+      if (newDate <= dueDate) {
+        return NextResponse.json({ 
+          error: 'New due date must be after the original due date' 
+        }, { status: 400 });
+      }
+
+      // Check if new date is before the next EMI's due date
+      const nextEMI = await db.eMISchedule.findFirst({
+        where: { 
+          loanApplicationId,
+          installmentNumber: emi.installmentNumber + 1
+        }
+      });
+
+      if (nextEMI) {
+        const nextDueDate = new Date(nextEMI.dueDate);
+        if (newDate >= nextDueDate) {
+          return NextResponse.json({ 
+            error: 'New due date must be before the next EMI due date (' + nextDueDate.toLocaleDateString() + ')' 
+          }, { status: 400 });
+        }
       }
     }
 
