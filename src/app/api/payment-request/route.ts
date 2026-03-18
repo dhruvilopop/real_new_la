@@ -74,7 +74,16 @@ export async function GET(request: NextRequest) {
       }
       
       // Fetch company's default bank account details for payment
-      let bankAccountDetails = null;
+      let bankAccountDetails: {
+        bankAccountId: string;
+        bankName: string;
+        bankAccountNumber: string;
+        bankAccountName: string;
+        bankIfscCode: string | null;
+        bankBranch: string | null;
+        companyUpiId: string | null;
+        companyQrCodeUrl: string | null;
+      } | null = null;
       if (companyId) {
         const defaultBankAccount = await db.bankAccount.findFirst({
           where: { 
