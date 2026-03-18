@@ -145,8 +145,8 @@ export default function MyCreditPassbook() {
   const [filterType, setFilterType] = useState('all');
   const [filterCreditType, setFilterCreditType] = useState('all');
   
-  // Auto-refresh state
-  const [autoRefresh, setAutoRefresh] = useState(true);
+  // Auto-refresh state - disabled by default to prevent DB connection limit issues
+  const [autoRefresh, setAutoRefresh] = useState(false);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   

@@ -72,7 +72,7 @@ export default function DashboardLayout({
   const [totalCompanyCredit, setTotalCompanyCredit] = useState<number>(0);
   const [totalPersonalCredit, setTotalPersonalCredit] = useState<number>(0);
   
-  // Auto-refresh for credit display
+  // Fetch credit on initial load only (no polling to prevent DB connection issues)
   useEffect(() => {
     const fetchUserCredit = async () => {
       try {
@@ -109,19 +109,10 @@ export default function DashboardLayout({
       }
     };
     
-    // Initial fetch
+    // Only fetch on initial mount - no polling
     if (user?.id && user.role !== 'CUSTOMER') {
       fetchUserCredit();
     }
-    
-    // Auto-refresh every 2 minutes (reduced to prevent DB connection limit issues)
-    const interval = setInterval(() => {
-      if (user?.id && user.role !== 'CUSTOMER') {
-        fetchUserCredit();
-      }
-    }, 120000); // 2 minutes
-    
-    return () => clearInterval(interval);
   }, [user?.id, user?.role]);
 
   return (

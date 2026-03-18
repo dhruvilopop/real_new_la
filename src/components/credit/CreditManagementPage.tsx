@@ -134,8 +134,8 @@ export default function CreditManagementPage() {
   const [filterRole, setFilterRole] = useState('all');
   const [filterCreditType, setFilterCreditType] = useState('all');
   
-  // Auto-refresh state
-  const [autoRefresh, setAutoRefresh] = useState(true);
+  // Auto-refresh state - disabled by default to prevent DB connection limit issues
+  const [autoRefresh, setAutoRefresh] = useState(false);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const hasFetchedRef = useRef(false);
