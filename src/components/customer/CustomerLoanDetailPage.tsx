@@ -58,6 +58,10 @@ interface PaymentSettings {
   companyUpiId?: string;
   companyQrCodeUrl?: string;
   collectionBankAccountId?: string;
+  bankName?: string;
+  bankAccountNumber?: string;
+  bankIfscCode?: string;
+  bankBranch?: string;
 }
 
 interface BankDetails {
@@ -975,16 +979,22 @@ export default function CustomerLoanDetailPage() {
                       </div>
                       <div className="flex justify-between">
                         <span className="text-gray-500">Bank Name:</span>
-                        <span className="font-medium">HDFC Bank</span>
+                        <span className="font-medium">{paymentSettings?.bankName || 'HDFC Bank'}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-gray-500">Account Number:</span>
-                        <span className="font-mono">50100212345678</span>
+                        <span className="font-mono">{paymentSettings?.bankAccountNumber || '50100212345678'}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-gray-500">IFSC Code:</span>
-                        <span className="font-mono">HDFC0001234</span>
+                        <span className="font-mono">{paymentSettings?.bankIfscCode || 'HDFC0001234'}</span>
                       </div>
+                      {paymentSettings?.bankBranch && (
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Branch:</span>
+                          <span className="font-medium">{paymentSettings.bankBranch}</span>
+                        </div>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
