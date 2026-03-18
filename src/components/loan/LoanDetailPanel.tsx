@@ -683,11 +683,12 @@ export default function LoanDetailPanel({ loanId, open, onClose, onEMIPaid, user
         ) : (
           <div className="flex-1 overflow-y-auto flex flex-col">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
-              <TabsList className="grid grid-cols-5 mx-4 mt-2 flex-shrink-0 bg-gray-100 p-1 rounded-lg">
+              <TabsList className="grid grid-cols-6 mx-4 mt-2 flex-shrink-0 bg-gray-100 p-1 rounded-lg">
                 <TabsTrigger value="overview" className="text-xs data-[state=active]:bg-white">Overview</TabsTrigger>
                 <TabsTrigger value="customer" className="text-xs data-[state=active]:bg-white">Customer</TabsTrigger>
                 <TabsTrigger value="documents" className="text-xs data-[state=active]:bg-white">Documents</TabsTrigger>
                 <TabsTrigger value="emi" className="text-xs data-[state=active]:bg-white">EMI</TabsTrigger>
+                <TabsTrigger value="form" className="text-xs data-[state=active]:bg-white">Form</TabsTrigger>
                 <TabsTrigger value="history" className="text-xs data-[state=active]:bg-white">History</TabsTrigger>
               </TabsList>
 
