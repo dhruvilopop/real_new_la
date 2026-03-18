@@ -153,11 +153,95 @@ export async function PUT(request: NextRequest) {
       if (!isNaN(num)) data.totalWorkExperience = num;
       else delete data.totalWorkExperience;
     }
+    
+    // Handle employment-specific numeric fields
+    if (data.annualTurnover) {
+      const num = parseFloat(data.annualTurnover as string);
+      if (!isNaN(num)) data.annualTurnover = num;
+      else delete data.annualTurnover;
+    }
+    if (data.annualRevenue) {
+      const num = parseFloat(data.annualRevenue as string);
+      if (!isNaN(num)) data.annualRevenue = num;
+      else delete data.annualRevenue;
+    }
+    if (data.pensionAmount) {
+      const num = parseFloat(data.pensionAmount as string);
+      if (!isNaN(num)) data.pensionAmount = num;
+      else delete data.pensionAmount;
+    }
+    if (data.spouseIncome) {
+      const num = parseFloat(data.spouseIncome as string);
+      if (!isNaN(num)) data.spouseIncome = num;
+      else delete data.spouseIncome;
+    }
+    if (data.familyIncome) {
+      const num = parseFloat(data.familyIncome as string);
+      if (!isNaN(num)) data.familyIncome = num;
+      else delete data.familyIncome;
+    }
+    if (data.guardianIncome) {
+      const num = parseFloat(data.guardianIncome as string);
+      if (!isNaN(num)) data.guardianIncome = num;
+      else delete data.guardianIncome;
+    }
+    if (data.monthlySupportAmount) {
+      const num = parseFloat(data.monthlySupportAmount as string);
+      if (!isNaN(num)) data.monthlySupportAmount = num;
+      else delete data.monthlySupportAmount;
+    }
+    
+    // Handle employment-specific integer fields
+    if (data.yearsInBusiness) {
+      const num = parseInt(data.yearsInBusiness as string);
+      if (!isNaN(num)) data.yearsInBusiness = num;
+      else delete data.yearsInBusiness;
+    }
+    if (data.yearsInOperation) {
+      const num = parseInt(data.yearsInOperation as string);
+      if (!isNaN(num)) data.yearsInOperation = num;
+      else delete data.yearsInOperation;
+    }
+    if (data.numberOfEmployees) {
+      const num = parseInt(data.numberOfEmployees as string);
+      if (!isNaN(num)) data.numberOfEmployees = num;
+      else delete data.numberOfEmployees;
+    }
+    if (data.yearsOfPractice) {
+      const num = parseInt(data.yearsOfPractice as string);
+      if (!isNaN(num)) data.yearsOfPractice = num;
+      else delete data.yearsOfPractice;
+    }
+    
+    // Handle date fields
+    if (data.retirementDate) {
+      const parsedDate = new Date(data.retirementDate as string);
+      if (!isNaN(parsedDate.getTime())) {
+        data.retirementDate = parsedDate;
+      } else {
+        delete data.retirementDate;
+      }
+    }
+    if (data.expectedCompletion) {
+      const parsedDate = new Date(data.expectedCompletion as string);
+      if (!isNaN(parsedDate.getTime())) {
+        data.expectedCompletion = parsedDate;
+      } else {
+        delete data.expectedCompletion;
+      }
+    }
+    
     // riskScore is already an integer from the form
     if (data.riskScore !== undefined) {
       const num = parseInt(data.riskScore as string);
       if (!isNaN(num)) data.riskScore = num;
       else delete data.riskScore;
+    }
+    
+    // Handle applicantSignature - store in digitalSignature field
+    if (data.applicantSignature) {
+      data.digitalSignature = data.applicantSignature;
+      delete data.applicantSignature;
     }
     
     // Handle status update
