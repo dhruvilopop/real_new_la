@@ -548,11 +548,15 @@ export function ActiveLoansSection({
                                 
                                 {/* EMI List */}
                                 <div className="grid gap-2">
-                                  {loan.emiSchedules.slice(0, 6).map((emi: any, idx: number) => (
+                                  {loan.emiSchedules.slice(0, 6).map((emi: any, idx: number) => {
+                                    // INTEREST_ONLY_PAID is considered as paid
+                                    const isPaid = emi.paymentStatus === 'PAID' || emi.paymentStatus === 'INTEREST_ONLY_PAID';
+                                    const isInterestPaid = emi.paymentStatus === 'INTEREST_ONLY_PAID';
+                                    return (
                                     <div 
                                       key={emi.id || idx}
                                       className={`flex items-center justify-between p-3 rounded-lg ${
-                                        emi.paymentStatus === 'PAID' ? 'bg-green-50 border border-green-100' :
+                                        isPaid ? 'bg-green-50 border border-green-100' :
                                         emi.paymentStatus === 'OVERDUE' ? 'bg-red-50 border border-red-100' :
                                         emi.paymentStatus === 'PARTIALLY_PAID' ? 'bg-orange-50 border border-orange-100' :
                                         'bg-gray-50 border border-gray-100'
@@ -560,7 +564,7 @@ export function ActiveLoansSection({
                                     >
                                       <div className="flex items-center gap-3">
                                         <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium ${
-                                          emi.paymentStatus === 'PAID' ? 'bg-green-200 text-green-700' :
+                                          isPaid ? 'bg-green-200 text-green-700' :
                                           emi.paymentStatus === 'OVERDUE' ? 'bg-red-200 text-red-700' :
                                           emi.paymentStatus === 'PARTIALLY_PAID' ? 'bg-orange-200 text-orange-700' :
                                           'bg-gray-200 text-gray-700'
@@ -571,7 +575,8 @@ export function ActiveLoansSection({
                                           <p className="text-sm font-medium">{formatDate(emi.dueDate)}</p>
                                           <div className="flex items-center gap-2 flex-wrap">
                                             <p className="text-xs text-gray-500">
-                                              {emi.paymentStatus === 'PAID' ? 'Paid' : 
+                                              {isInterestPaid ? 'Interest Paid' :
+                                               isPaid ? 'Paid' : 
                                                emi.paymentStatus === 'OVERDUE' ? 'Overdue' :
                                                emi.paymentStatus === 'PARTIALLY_PAID' ? 'Partial' : 'Pending'}
                                             </p>
@@ -586,11 +591,11 @@ export function ActiveLoansSection({
                                       <div className="flex items-center gap-3">
                                         <div className="text-right">
                                           <p className="font-medium">{formatCurrency(emi.totalAmount)}</p>
-                                          {emi.paidAmount && emi.paidAmount > 0 && emi.paymentStatus !== 'PAID' && (
+                                          {emi.paidAmount && emi.paidAmount > 0 && !isPaid && (
                                             <p className="text-xs text-emerald-600">Paid: {formatCurrency(emi.paidAmount)}</p>
                                           )}
                                         </div>
-                                        {canManageEmi && emi.paymentStatus !== 'PAID' && (
+                                        {canManageEmi && !isPaid && (
                                           <div className="flex gap-1">
                                             <Button 
                                               size="sm" 
@@ -614,7 +619,7 @@ export function ActiveLoansSection({
                                         )}
                                       </div>
                                     </div>
-                                  ))}
+                                  );})}
                                 </div>
                               </div>
                             ) : (

@@ -3959,12 +3959,12 @@ export default function SuperAdminDashboard() {
                                   <TableCell className="text-xs text-green-600">{emi.paidAmount > 0 ? formatCurrency(emi.paidAmount) : '-'}</TableCell>
                                   <TableCell>
                                     <Badge className={`text-xs ${
-                                      emi.paymentStatus === 'PAID' ? 'bg-green-100 text-green-700' :
+                                      emi.paymentStatus === 'PAID' || emi.paymentStatus === 'INTEREST_ONLY_PAID' ? 'bg-green-100 text-green-700' :
                                       emi.paymentStatus === 'OVERDUE' ? 'bg-red-100 text-red-700' :
                                       emi.paymentStatus === 'PARTIALLY_PAID' ? 'bg-amber-100 text-amber-700' :
                                       'bg-blue-100 text-blue-700'
                                     }`}>
-                                      {emi.paymentStatus}
+                                      {emi.paymentStatus === 'INTEREST_ONLY_PAID' ? 'Interest Paid' : emi.paymentStatus}
                                     </Badge>
                                   </TableCell>
                                 </TableRow>

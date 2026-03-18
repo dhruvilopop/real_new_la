@@ -276,7 +276,7 @@ export default function CustomerLoanDetailPage() {
           loanApplicationId: loanId,
           emiScheduleId: selectedEmi.id,
           customerId: user.id,
-          paymentType: selectedPaymentType,
+          paymentType: selectedPaymentType === 'PARTIAL' ? 'PARTIAL_PAYMENT' : selectedPaymentType,
           requestedAmount,
           partialAmount: partialAmt,
           remainingAmount: remainingAmt,

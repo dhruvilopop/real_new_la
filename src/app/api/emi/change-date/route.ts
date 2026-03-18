@@ -73,8 +73,8 @@ export async function POST(request: NextRequest) {
       const oldDateObj = new Date(oldDueDate);
       const daysDiff = Math.ceil((newDate.getTime() - oldDateObj.getTime()) / (1000 * 60 * 60 * 24));
 
-      if (daysDiff > 0 && subsequentEmis.length > 0) {
-        // Shift subsequent EMIs by the same number of days
+      // Shift subsequent EMIs by the same number of days (works for both forward and backward)
+      if (subsequentEmis.length > 0) {
         for (const subsequentEmi of subsequentEmis) {
           const currentDueDate = new Date(subsequentEmi.dueDate);
           const newSubsequentDate = new Date(currentDueDate.getTime() + (daysDiff * 24 * 60 * 60 * 1000));
@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
             data: {
               dueDate: newSubsequentDate,
               originalDueDate: subsequentEmi.originalDueDate || subsequentEmi.dueDate,
-              notes: `${subsequentEmi.notes || ''}\n[AUTO-SHIFT] Shifted by ${daysDiff} days due to previous EMI date change.`
+              notes: `${subsequentEmi.notes || ''}\n[AUTO-SHIFT] Shifted by ${daysDiff > 0 ? '+' : ''}${daysDiff} days due to EMI #${emi.installmentNumber} date change.`
             }
           });
         }
