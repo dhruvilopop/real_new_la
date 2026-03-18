@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { generateApplicationNo } from '@/utils/helpers';
+import { Prisma } from '@prisma/client';
 
 export async function POST(request: NextRequest) {
   try {
@@ -53,9 +54,112 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// Define valid LoanApplication fields from schema
+const VALID_LOAN_APPLICATION_FIELDS = [
+  // Personal Info
+  'title', 'firstName', 'middleName', 'lastName', 'fatherName', 'motherName',
+  'gender', 'maritalStatus', 'dateOfBirth', 'nationality',
+  // Contact
+  'phone', 'address', 'city', 'state', 'pincode',
+  // KYC
+  'panNumber', 'aadhaarNumber',
+  // Employment - Common
+  'employmentType', 'employerName', 'employerAddress', 'designation',
+  'yearsInEmployment', 'totalWorkExperience', 'officePhone', 'officeEmail',
+  'monthlyIncome', 'annualIncome', 'otherIncome', 'incomeSource',
+  // Employment - Self-Employed
+  'businessName', 'businessType', 'yearsInBusiness', 'annualTurnover', 'businessAddress',
+  // Employment - Business Owner
+  'companyName', 'companyType', 'yearsInOperation', 'annualRevenue', 'numberOfEmployees',
+  // Employment - Professional
+  'professionType', 'practiceName', 'yearsOfPractice', 'professionalRegNo',
+  // Employment - Retired
+  'previousEmployer', 'retirementDate', 'pensionAmount',
+  // Employment - Housewife
+  'spouseName', 'spouseOccupation', 'spouseIncome', 'familyIncome',
+  // Employment - Student
+  'institutionName', 'courseProgram', 'expectedCompletion', 'guardianName', 'guardianIncome',
+  // Employment - Unemployed
+  'sourceOfFunds', 'monthlySupportAmount', 'supportProviderName',
+  // Bank Details
+  'bankAccountNumber', 'bankIfsc', 'bankName', 'bankBranch', 'accountType', 'accountHolderName',
+  // References
+  'reference1Name', 'reference1Phone', 'reference1Relation', 'reference1Address',
+  'reference2Name', 'reference2Phone', 'reference2Relation', 'reference2Address',
+  // Documents
+  'panCardDoc', 'aadhaarFrontDoc', 'aadhaarBackDoc', 'incomeProofDoc',
+  'addressProofDoc', 'photoDoc', 'bankStatementDoc', 'salarySlipDoc',
+  'electionCardDoc', 'housePhotoDoc', 'otherDocs',
+  // Signature
+  'digitalSignature', 'signatureHash', 'consentGiven', 'consentTimestamp', 'consentIp',
+  // Risk
+  'riskScore', 'fraudFlag', 'fraudReason', 'rejectionReason',
+];
+
+// Field type mappings for proper conversion
+const FLOAT_FIELDS = [
+  'monthlyIncome', 'annualIncome', 'otherIncome', 'annualTurnover', 'annualRevenue',
+  'pensionAmount', 'spouseIncome', 'familyIncome', 'guardianIncome', 'monthlySupportAmount',
+  'requestedAmount', 'requestedInterestRate', 'loanAmount', 'interestRate', 'emiAmount',
+  'processingFee', 'disbursedAmount'
+];
+
+const INT_FIELDS = [
+  'yearsInEmployment', 'totalWorkExperience', 'yearsInBusiness', 'yearsInOperation',
+  'numberOfEmployees', 'yearsOfPractice', 'requestedTenure', 'tenure', 'riskScore', 'creditScore'
+];
+
+const DATE_FIELDS = [
+  'dateOfBirth', 'retirementDate', 'expectedCompletion', 'consentTimestamp'
+];
+
+const BOOLEAN_FIELDS = [
+  'panVerified', 'aadhaarVerified', 'bankVerified', 'consentGiven', 'fraudFlag'
+];
+
+function convertFieldValue(key: string, value: unknown): unknown {
+  // Skip empty values
+  if (value === '' || value === undefined || value === null) {
+    return undefined;
+  }
+  
+  // Handle string trimming
+  if (typeof value === 'string') {
+    value = value.trim();
+    if (value === '') return undefined;
+  }
+  
+  // Convert based on field type
+  if (FLOAT_FIELDS.includes(key)) {
+    const num = parseFloat(String(value));
+    return isNaN(num) ? undefined : num;
+  }
+  
+  if (INT_FIELDS.includes(key)) {
+    const num = parseInt(String(value));
+    return isNaN(num) ? undefined : num;
+  }
+  
+  if (DATE_FIELDS.includes(key)) {
+    if (typeof value === 'string' && value) {
+      const date = new Date(value);
+      return isNaN(date.getTime()) ? undefined : date;
+    }
+    return undefined;
+  }
+  
+  if (BOOLEAN_FIELDS.includes(key)) {
+    return Boolean(value);
+  }
+  
+  return value;
+}
+
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
+    console.log('[LOAN APPLY API] Received update request:', JSON.stringify(body, null, 2));
+    
     const { loanId, status, userId, ...updateData } = body;
 
     if (!loanId) {
@@ -65,6 +169,7 @@ export async function PUT(request: NextRequest) {
       );
     }
 
+    // Check if loan exists
     const loan = await db.loanApplication.findUnique({
       where: { id: loanId }
     });
@@ -76,9 +181,8 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    // Separate LoanApplication fields from LoanForm fields
-    const loanFormFields = ['panVerified', 'aadhaarVerified', 'bankVerified', 'employmentVerified', 
-                           'addressVerified', 'incomeVerified', 'verificationRemarks', 'fraudFlag'];
+    // Build update data - only include valid fields
+    const data: Record<string, unknown> = { updatedAt: new Date() };
     
     // Map frontend field names to schema field names
     const fieldMapping: Record<string, string> = {
@@ -90,160 +194,29 @@ export async function PUT(request: NextRequest) {
       ref2Phone: 'reference2Phone',
       ref2Relation: 'reference2Relation',
       ref2Address: 'reference2Address',
+      applicantSignature: 'digitalSignature',
     };
     
-    const loanApplicationData: Record<string, unknown> = {};
-    const loanFormData: Record<string, unknown> = {};
-    
+    // Process each field
     for (const [key, value] of Object.entries(updateData)) {
-      // Map the field name if it's in the mapping
+      // Map field name if needed
       const mappedKey = fieldMapping[key] || key;
       
-      if (loanFormFields.includes(mappedKey)) {
-        loanFormData[mappedKey] = value;
-      } else {
-        loanApplicationData[mappedKey] = value;
-      }
-    }
-    
-    // Build update data for LoanApplication
-    const data: Record<string, unknown> = { updatedAt: new Date() };
-    
-    // Copy only non-empty values from loanApplicationData
-    for (const [key, value] of Object.entries(loanApplicationData)) {
-      // Skip empty strings and undefined values
-      if (value === '' || value === undefined || value === null) {
+      // Skip if not a valid field
+      if (!VALID_LOAN_APPLICATION_FIELDS.includes(mappedKey)) {
+        console.log(`[LOAN APPLY API] Skipping invalid field: ${key}`);
         continue;
       }
-      // For strings, trim and check if not empty
-      if (typeof value === 'string' && value.trim() === '') {
-        continue;
-      }
-      // Special handling for dateOfBirth - skip if it's an empty or invalid date
-      if (key === 'dateOfBirth') {
-        if (typeof value === 'string' && value.trim()) {
-          const parsedDate = new Date(value);
-          if (!isNaN(parsedDate.getTime())) {
-            data[key] = parsedDate;
-          }
-        }
-        continue; // Skip the normal assignment for dateOfBirth
-      }
-      data[key] = value;
-    }
-    
-    // Handle numeric fields - only set if valid number
-    if (data.monthlyIncome) {
-      const num = parseFloat(data.monthlyIncome as string);
-      if (!isNaN(num)) data.monthlyIncome = num;
-      else delete data.monthlyIncome;
-    }
-    if (data.annualIncome) {
-      const num = parseFloat(data.annualIncome as string);
-      if (!isNaN(num)) data.annualIncome = num;
-      else delete data.annualIncome;
-    }
-    if (data.yearsInEmployment) {
-      const num = parseInt(data.yearsInEmployment as string);
-      if (!isNaN(num)) data.yearsInEmployment = num;
-      else delete data.yearsInEmployment;
-    }
-    if (data.totalWorkExperience) {
-      const num = parseInt(data.totalWorkExperience as string);
-      if (!isNaN(num)) data.totalWorkExperience = num;
-      else delete data.totalWorkExperience;
-    }
-    
-    // Handle employment-specific numeric fields
-    if (data.annualTurnover) {
-      const num = parseFloat(data.annualTurnover as string);
-      if (!isNaN(num)) data.annualTurnover = num;
-      else delete data.annualTurnover;
-    }
-    if (data.annualRevenue) {
-      const num = parseFloat(data.annualRevenue as string);
-      if (!isNaN(num)) data.annualRevenue = num;
-      else delete data.annualRevenue;
-    }
-    if (data.pensionAmount) {
-      const num = parseFloat(data.pensionAmount as string);
-      if (!isNaN(num)) data.pensionAmount = num;
-      else delete data.pensionAmount;
-    }
-    if (data.spouseIncome) {
-      const num = parseFloat(data.spouseIncome as string);
-      if (!isNaN(num)) data.spouseIncome = num;
-      else delete data.spouseIncome;
-    }
-    if (data.familyIncome) {
-      const num = parseFloat(data.familyIncome as string);
-      if (!isNaN(num)) data.familyIncome = num;
-      else delete data.familyIncome;
-    }
-    if (data.guardianIncome) {
-      const num = parseFloat(data.guardianIncome as string);
-      if (!isNaN(num)) data.guardianIncome = num;
-      else delete data.guardianIncome;
-    }
-    if (data.monthlySupportAmount) {
-      const num = parseFloat(data.monthlySupportAmount as string);
-      if (!isNaN(num)) data.monthlySupportAmount = num;
-      else delete data.monthlySupportAmount;
-    }
-    
-    // Handle employment-specific integer fields
-    if (data.yearsInBusiness) {
-      const num = parseInt(data.yearsInBusiness as string);
-      if (!isNaN(num)) data.yearsInBusiness = num;
-      else delete data.yearsInBusiness;
-    }
-    if (data.yearsInOperation) {
-      const num = parseInt(data.yearsInOperation as string);
-      if (!isNaN(num)) data.yearsInOperation = num;
-      else delete data.yearsInOperation;
-    }
-    if (data.numberOfEmployees) {
-      const num = parseInt(data.numberOfEmployees as string);
-      if (!isNaN(num)) data.numberOfEmployees = num;
-      else delete data.numberOfEmployees;
-    }
-    if (data.yearsOfPractice) {
-      const num = parseInt(data.yearsOfPractice as string);
-      if (!isNaN(num)) data.yearsOfPractice = num;
-      else delete data.yearsOfPractice;
-    }
-    
-    // Handle date fields
-    if (data.retirementDate) {
-      const parsedDate = new Date(data.retirementDate as string);
-      if (!isNaN(parsedDate.getTime())) {
-        data.retirementDate = parsedDate;
-      } else {
-        delete data.retirementDate;
+      
+      // Convert value
+      const convertedValue = convertFieldValue(mappedKey, value);
+      
+      // Only include if conversion was successful
+      if (convertedValue !== undefined) {
+        data[mappedKey] = convertedValue;
       }
     }
-    if (data.expectedCompletion) {
-      const parsedDate = new Date(data.expectedCompletion as string);
-      if (!isNaN(parsedDate.getTime())) {
-        data.expectedCompletion = parsedDate;
-      } else {
-        delete data.expectedCompletion;
-      }
-    }
-    
-    // riskScore is already an integer from the form
-    if (data.riskScore !== undefined) {
-      const num = parseInt(data.riskScore as string);
-      if (!isNaN(num)) data.riskScore = num;
-      else delete data.riskScore;
-    }
-    
-    // Handle applicantSignature - store in digitalSignature field
-    if (data.applicantSignature) {
-      data.digitalSignature = data.applicantSignature;
-      delete data.applicantSignature;
-    }
-    
+
     // Handle status update
     if (status) {
       data.status = status;
@@ -251,8 +224,7 @@ export async function PUT(request: NextRequest) {
         data.loanFormCompletedAt = new Date();
         data.currentStage = 'SESSION_CREATION';
         
-        // Reassign back to the agent who assigned this staff
-        // Get the staff user and find their supervising agent
+        // Reassign to agent
         if (userId) {
           const staffUser = await db.user.findUnique({
             where: { id: userId },
@@ -265,13 +237,31 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    // Update the loan application (without LoanForm fields)
+    console.log('[LOAN APPLY API] Update data:', JSON.stringify(data, null, 2));
+
+    // Update the loan application
     const updatedLoan = await db.loanApplication.update({
       where: { id: loanId },
       data
     });
 
-    // Create or update loan form
+    // Create or update loan form for verification status
+    const loanFormData = {
+      panVerified: Boolean(updateData.panVerified),
+      aadhaarVerified: Boolean(updateData.aadhaarVerified),
+      bankVerified: Boolean(updateData.bankVerified),
+      employmentVerified: !!(updateData.employmentType && (updateData.employerName || updateData.businessName || updateData.companyName || updateData.institutionName || updateData.spouseName || updateData.previousEmployer || updateData.sourceOfFunds)),
+      addressVerified: !!(updateData.address && updateData.city),
+      incomeVerified: !!(updateData.monthlyIncome || updateData.annualTurnover || updateData.annualRevenue || updateData.familyIncome || updateData.pensionAmount || updateData.guardianIncome || updateData.monthlySupportAmount),
+      verificationDate: new Date(),
+      verifiedById: userId || null,
+      riskScore: parseInt(updateData.riskScore) || 0,
+      fraudFlag: Boolean(updateData.fraudFlag),
+      fraudReason: updateData.fraudFlag ? updateData.verificationRemarks : null,
+      verificationRemarks: updateData.verificationRemarks || null,
+      internalRemarks: updateData.verificationRemarks || null
+    };
+
     const existingLoanForm = await db.loanForm.findUnique({
       where: { loanApplicationId: loanId }
     });
@@ -279,44 +269,18 @@ export async function PUT(request: NextRequest) {
     if (existingLoanForm) {
       await db.loanForm.update({
         where: { loanApplicationId: loanId },
-        data: {
-          panVerified: updateData.panVerified || false,
-          aadhaarVerified: updateData.aadhaarVerified || false,
-          bankVerified: updateData.bankVerified || false,
-          employmentVerified: !!(updateData.employmentType && updateData.employerName),
-          addressVerified: !!(updateData.address && updateData.city),
-          incomeVerified: !!(updateData.monthlyIncome),
-          verificationDate: new Date(),
-          verifiedById: userId,
-          riskScore: parseInt(updateData.riskScore) || 0,
-          fraudFlag: updateData.fraudFlag || false,
-          fraudReason: updateData.fraudFlag ? updateData.verificationRemarks : null,
-          verificationRemarks: updateData.verificationRemarks,
-          internalRemarks: updateData.verificationRemarks
-        }
+        data: loanFormData
       });
     } else {
       await db.loanForm.create({
         data: {
           loanApplicationId: loanId,
-          panVerified: updateData.panVerified || false,
-          aadhaarVerified: updateData.aadhaarVerified || false,
-          bankVerified: updateData.bankVerified || false,
-          employmentVerified: !!(updateData.employmentType && updateData.employerName),
-          addressVerified: !!(updateData.address && updateData.city),
-          incomeVerified: !!(updateData.monthlyIncome),
-          verificationDate: new Date(),
-          verifiedById: userId,
-          riskScore: parseInt(updateData.riskScore) || 0,
-          fraudFlag: updateData.fraudFlag || false,
-          fraudReason: updateData.fraudFlag ? updateData.verificationRemarks : null,
-          verificationRemarks: updateData.verificationRemarks,
-          internalRemarks: updateData.verificationRemarks
+          ...loanFormData
         }
       });
     }
 
-    // Create workflow log if status changed
+    // Create workflow log
     if (status && status !== loan.status) {
       await db.workflowLog.create({
         data: {
@@ -348,8 +312,25 @@ export async function PUT(request: NextRequest) {
       success: true,
       loan: updatedLoan
     });
+    
   } catch (error) {
-    console.error('Error updating loan:', error);
+    console.error('[LOAN APPLY API] Error:', error);
+    
+    // Handle Prisma errors
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      return NextResponse.json(
+        { error: `Database error: ${error.code}`, details: error.message },
+        { status: 400 }
+      );
+    }
+    
+    if (error instanceof Prisma.PrismaClientValidationError) {
+      return NextResponse.json(
+        { error: 'Validation error', details: error.message },
+        { status: 400 }
+      );
+    }
+    
     return NextResponse.json(
       { error: 'Failed to update loan application', details: (error as Error).message },
       { status: 500 }

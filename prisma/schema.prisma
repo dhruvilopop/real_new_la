@@ -232,7 +232,7 @@ model LoanApplication {
   sourceOfFunds         String?
   monthlySupportAmount  Float?
   supportProviderName   String?
-  // Bank details
+  // Bank Details
   bankAccountNumber     String?
   bankIfsc              String?
   bankName              String?
