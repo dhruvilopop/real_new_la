@@ -114,7 +114,8 @@ async function getEMICollectionData(companyIds: string[], startDate?: string | n
         where: Object.keys(dateFilter).length > 0 ? { paidDate: dateFilter } : {},
         orderBy: { dueDate: 'asc' }
       },
-      company: true
+      company: true,
+      sessionForm: true
     }
   });
 
@@ -159,7 +160,7 @@ async function getEMICollectionData(companyIds: string[], startDate?: string | n
         'UTR/Reference': emi.utrNumber || 'N/A',
         'Status': emi.paymentStatus,
         'Days Overdue': emi.daysOverdue || 0,
-        'Late Fee': emi.lateFee || 0,
+        'Late Fee': emi.penaltyAmount || 0,
         'Disbursed Amount': loan.sessionForm?.approvedAmount || loan.requestedAmount,
         'Interest Rate': loan.sessionForm?.interestRate || 'N/A',
         'Tenure': loan.sessionForm?.tenure || 'N/A'
@@ -172,7 +173,7 @@ async function getEMICollectionData(companyIds: string[], startDate?: string | n
     for (const emi of loan.emis) {
       emiRecords.push({
         'Loan Type': 'OFFLINE',
-        'Loan ID': loan.identifier,
+        'Loan ID': loan.loanNumber,
         'Customer ID': loan.customerId || 'N/A',
         'Customer Name': loan.customer?.name || 'N/A',
         'Customer Phone': loan.customer?.phone || 'N/A',
@@ -181,18 +182,18 @@ async function getEMICollectionData(companyIds: string[], startDate?: string | n
         'EMI Number': emi.installmentNumber,
         'Due Date': format(new Date(emi.dueDate), 'dd/MM/yyyy'),
         'Paid Date': emi.paidDate ? format(new Date(emi.paidDate), 'dd/MM/yyyy') : 'Pending',
-        'EMI Amount': emi.amount,
+        'EMI Amount': emi.totalAmount,
         'Principal': emi.principalAmount,
         'Interest': emi.interestAmount,
         'Paid Amount': emi.paidAmount || 0,
         'Principal Paid': emi.paidPrincipal || 0,
         'Interest Paid': emi.paidInterest || 0,
         'Payment Mode': emi.paymentMode || 'N/A',
-        'UTR/Reference': emi.utrNumber || 'N/A',
-        'Status': emi.status,
+        'UTR/Reference': emi.paymentReference || 'N/A',
+        'Status': emi.paymentStatus,
         'Days Overdue': 0,
         'Late Fee': 0,
-        'Disbursed Amount': loan.approvedAmount,
+        'Disbursed Amount': loan.loanAmount,
         'Interest Rate': loan.interestRate,
         'Tenure': loan.tenure
       });
@@ -281,7 +282,7 @@ async function getDisbursementData(companyIds: string[], startDate?: string | nu
   for (const loan of offlineLoans) {
     records.push({
       'Loan Type': 'OFFLINE',
-      'Loan ID': loan.identifier,
+      'Loan ID': loan.loanNumber,
       'Customer ID': loan.customerId || 'N/A',
       'Customer Name': loan.customer?.name || 'N/A',
       'Customer Phone': loan.customer?.phone || 'N/A',
@@ -290,7 +291,7 @@ async function getDisbursementData(companyIds: string[], startDate?: string | nu
       'Customer Aadhaar': 'N/A',
       'Company': loan.company?.name || 'N/A',
       'Disbursement Date': format(new Date(loan.createdAt), 'dd/MM/yyyy'),
-      'Disbursed Amount': loan.approvedAmount,
+      'Disbursed Amount': loan.loanAmount,
       'Interest Rate': loan.interestRate,
       'Tenure (Months)': loan.tenure,
       'EMI Amount': loan.emiAmount || 'N/A',
@@ -300,7 +301,7 @@ async function getDisbursementData(companyIds: string[], startDate?: string | nu
       'Bank Account': 'N/A',
       'Bank Name': 'N/A',
       'IFSC Code': 'N/A',
-      'Purpose': loan.purpose || 'N/A'
+      'Purpose': loan.notes || 'N/A'
     });
   }
 
@@ -331,7 +332,7 @@ async function getCustomerData(companyIds: string[]) {
     include: {
       loanApplications: {
         where: companyIds.length > 0 ? { companyId: { in: companyIds } } : {},
-        include: { company: true }
+        include: { company: true, sessionForm: true }
       }
     }
   });
@@ -450,21 +451,29 @@ async function getTransactionData(companyIds: string[], startDate?: string | nul
 async function getTrialBalanceData(companyIds: string[]) {
   const accounts = await db.chartOfAccount.findMany({
     where: companyIds.length > 0 ? { companyId: { in: companyIds } } : {},
-    include: { company: true },
+    include: { 
+      company: true,
+      journalLines: true
+    },
     orderBy: { accountCode: 'asc' }
   });
 
-  const records = accounts.map(acc => ({
-    'Account Code': acc.accountCode,
-    'Account Name': acc.accountName,
-    'Account Type': acc.accountType,
-    'Company': acc.company?.name || 'N/A',
-    'Opening Balance': acc.openingBalance || 0,
-    'Debit': acc.debitBalance || 0,
-    'Credit': acc.creditBalance || 0,
-    'Current Balance': acc.currentBalance,
-    'Active': acc.isActive ? 'Yes' : 'No'
-  }));
+  const records = accounts.map(acc => {
+    const totalDebit = acc.journalLines?.reduce((sum, line) => sum + (line.debitAmount || 0), 0) || 0;
+    const totalCredit = acc.journalLines?.reduce((sum, line) => sum + (line.creditAmount || 0), 0) || 0;
+    
+    return {
+      'Account Code': acc.accountCode,
+      'Account Name': acc.accountName,
+      'Account Type': acc.accountType,
+      'Company': acc.company?.name || 'N/A',
+      'Opening Balance': acc.openingBalance || 0,
+      'Debit': totalDebit,
+      'Credit': totalCredit,
+      'Current Balance': acc.currentBalance,
+      'Active': acc.isActive ? 'Yes' : 'No'
+    };
+  });
 
   return {
     title: 'Trial Balance',
@@ -689,7 +698,7 @@ function convertToCSV(data: any): string {
   if (data.summary) {
     csv += '\n\nSUMMARY\n';
     for (const [key, value] of Object.entries(data.summary)) {
-      if (typeof value === 'object') {
+      if (typeof value === 'object' && value !== null) {
         csv += `${key}:\n`;
         for (const [k, v] of Object.entries(value)) {
           csv += `  ${k}: ${JSON.stringify(v)}\n`;

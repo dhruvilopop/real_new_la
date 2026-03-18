@@ -255,14 +255,14 @@ export default function CustomerLoanDetailPage() {
 
       // Calculate amounts based on payment type
       let requestedAmount = selectedEmi.totalAmount;
-      let partialAmt = null;
-      let remainingAmt = null;
-      let newDue = null;
+      let partialAmt: number | null = null;
+      let remainingAmt: number | null = null;
+      let newDue: Date | null = null;
 
       if (selectedPaymentType === 'PARTIAL') {
         partialAmt = parseFloat(partialAmount);
         remainingAmt = selectedEmi.totalAmount - partialAmt;
-        newDue = nextPaymentDate;
+        newDue = new Date(nextPaymentDate);
         requestedAmount = partialAmt;
       } else if (selectedPaymentType === 'INTEREST_ONLY') {
         requestedAmount = selectedEmi.interestAmount;

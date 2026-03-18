@@ -319,9 +319,9 @@ export default function AccountantDashboard() {
 
       // Fetch additional data in parallel
       const [accountsRes, fyRes, expenseRes] = await Promise.all([
-        fetch(`/api/accounting/chart-of-accounts?companyId=${companyId}`),
-        fetch(`/api/accounting/financial-year?companyId=${companyId}`),
-        fetch(`/api/accounting/expenses?companyId=${companyId}`),
+        fetch(`/api/accounting/chart-of-accounts?companyId=${companyFilter}`),
+        fetch(`/api/accounting/financial-year?companyId=${companyFilter}`),
+        fetch(`/api/accounting/expenses?companyId=${companyFilter}`),
       ]);
 
       if (accountsRes.ok) setAccounts((await accountsRes.json()).accounts || []);

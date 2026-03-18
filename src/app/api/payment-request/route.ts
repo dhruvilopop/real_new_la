@@ -377,6 +377,11 @@ export async function PUT(request: NextRequest) {
         const emi = paymentRequest.emiSchedule;
         const loan = paymentRequest.loanApplication;
 
+        // Ensure EMI exists
+        if (!emi) {
+          throw new Error('EMI schedule not found for this payment request');
+        }
+
         // Handle different payment types
         if (paymentRequest.paymentType === 'FULL_EMI') {
           // Mark EMI as fully paid
