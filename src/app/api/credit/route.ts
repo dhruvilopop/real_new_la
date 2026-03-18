@@ -11,7 +11,7 @@ import { createEMIPaymentEntry } from '@/lib/accounting-service';
 
 // Simple in-memory cache for credit summary (to prevent DB connection limit issues)
 const creditCache: Map<string, { data: any; timestamp: number }> = new Map();
-const CACHE_TTL = 30000; // 30 seconds cache
+const CACHE_TTL = 60000; // 1 minute cache (increased from 30s)
 
 // GET - Fetch credit balance and history for a user
 export async function GET(request: NextRequest) {

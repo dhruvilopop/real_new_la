@@ -114,12 +114,12 @@ export default function DashboardLayout({
       fetchUserCredit();
     }
     
-    // Auto-refresh every 30 seconds (reduced from 1 second to prevent DB connection limit issues)
+    // Auto-refresh every 2 minutes (reduced to prevent DB connection limit issues)
     const interval = setInterval(() => {
       if (user?.id && user.role !== 'CUSTOMER') {
         fetchUserCredit();
       }
-    }, 30000); // 30 seconds instead of 1 second
+    }, 120000); // 2 minutes
     
     return () => clearInterval(interval);
   }, [user?.id, user?.role]);
