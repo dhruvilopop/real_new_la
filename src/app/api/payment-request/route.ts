@@ -360,7 +360,35 @@ export async function PUT(request: NextRequest) {
     }
 
     if (action === 'approve') {
-      // Start transaction for approval process
+      const emi = paymentRequest.emiSchedule;
+      const loan = paymentRequest.loanApplication;
+
+      // Ensure EMI exists
+      if (!emi) {
+        return NextResponse.json({ error: 'EMI schedule not found for this payment request' }, { status: 400 });
+      }
+
+      // Pre-fetch data needed for INTEREST_ONLY payment BEFORE transaction
+      let lastEMI: any = null;
+      let nextEMI: any = null;
+      
+      if (paymentRequest.paymentType === 'INTEREST_ONLY') {
+        // Fetch last EMI for installment number
+        lastEMI = await db.eMISchedule.findFirst({
+          where: { loanApplicationId: paymentRequest.loanApplicationId },
+          orderBy: { installmentNumber: 'desc' }
+        });
+        
+        // Fetch next EMI for due date calculation
+        nextEMI = await db.eMISchedule.findFirst({
+          where: { 
+            loanApplicationId: paymentRequest.loanApplicationId,
+            installmentNumber: emi.installmentNumber + 1
+          }
+        });
+      }
+
+      // Start transaction for approval process with extended timeout
       const result = await db.$transaction(async (tx) => {
         // Update payment request status
         const updated = await tx.paymentRequest.update({
@@ -373,14 +401,6 @@ export async function PUT(request: NextRequest) {
             paymentConfirmedAt: new Date()
           }
         });
-
-        const emi = paymentRequest.emiSchedule;
-        const loan = paymentRequest.loanApplication;
-
-        // Ensure EMI exists
-        if (!emi) {
-          throw new Error('EMI schedule not found for this payment request');
-        }
 
         // Handle different payment types
         if (paymentRequest.paymentType === 'FULL_EMI') {
@@ -521,30 +541,17 @@ export async function PUT(request: NextRequest) {
             }
           });
 
-          // Get the last EMI number for this loan
-          const lastEMI = await tx.eMISchedule.findFirst({
-            where: { loanApplicationId: paymentRequest.loanApplicationId },
-            orderBy: { installmentNumber: 'desc' }
-          });
-
+          // Use pre-fetched last EMI for installment number
           const newInstallmentNumber = (lastEMI?.installmentNumber || 0) + 1;
           
           // Create a new EMI for the deferred principal with NEW interest
           const newPrincipal = emi.principalAmount;
           const interestRate = loan.sessionForm?.interestRate || 12;
-          const monthlyRate = interestRate / 100 / 12;
+          const monthlyRate = Number(interestRate) / 100 / 12;
           const newInterest = newPrincipal * monthlyRate;
           const newTotalAmount = newPrincipal + newInterest;
 
-          // Calculate due date - should be before the next EMI
-          const nextEMI = await tx.eMISchedule.findFirst({
-            where: { 
-              loanApplicationId: paymentRequest.loanApplicationId,
-              installmentNumber: emi.installmentNumber + 1
-            }
-          });
-
-          // New EMI due date: 15 days after current EMI or before next EMI
+          // New EMI due date: 15 days after current EMI or before next EMI (using pre-fetched nextEMI)
           let newDueDate: Date;
           if (nextEMI) {
             const nextDueDate = new Date(nextEMI.dueDate);
@@ -597,7 +604,7 @@ export async function PUT(request: NextRequest) {
         }
 
         return updated;
-      });
+      }, { timeout: 30000 }); // 30 second timeout for complex payment processing
 
       return NextResponse.json({ 
         success: true, 
