@@ -931,9 +931,9 @@ export default function CustomerLoanDetailPage() {
         setShowPaymentPage(open);
         if (!open) resetPaymentForm();
       }}>
-        <DialogContent className="sm:max-w-lg max-h-[95vh] p-0">
+        <DialogContent className="sm:max-w-lg max-h-[95vh] p-0 flex flex-col">
           {/* Header */}
-          <div className="bg-gradient-to-r from-emerald-500 to-teal-500 text-white p-6">
+          <div className="bg-gradient-to-r from-emerald-500 to-teal-500 text-white p-6 flex-shrink-0">
             <DialogHeader>
               <DialogTitle className="text-xl text-white">
                 {selectedPaymentType === 'FULL_EMI' && 'Full EMI Payment'}
@@ -946,7 +946,7 @@ export default function CustomerLoanDetailPage() {
             </DialogHeader>
           </div>
 
-          <ScrollArea className="max-h-[calc(95vh-180px)]">
+          <div className="flex-1 overflow-y-auto">
             <div className="p-6 space-y-6">
               {/* Amount Summary */}
               <Card className="border-0 bg-gray-50">
@@ -1177,10 +1177,10 @@ export default function CustomerLoanDetailPage() {
                 </div>
               </div>
             </div>
-          </ScrollArea>
+          </div>
 
           {/* Footer */}
-          <div className="p-4 border-t bg-gray-50">
+          <div className="p-4 border-t bg-gray-50 flex-shrink-0">
             <div className="flex gap-3">
               <Button 
                 variant="outline" 
@@ -1195,7 +1195,10 @@ export default function CustomerLoanDetailPage() {
               <Button 
                 type="button"
                 className="flex-1 bg-emerald-500 hover:bg-emerald-600"
-                onClick={handleSubmitPayment}
+                onClick={() => {
+                  alert('BUTTON CLICKED!');
+                  handleSubmitPayment();
+                }}
                 disabled={paymentLoading || uploadingProof}
               >
                 {paymentLoading || uploadingProof ? (
