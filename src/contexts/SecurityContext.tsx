@@ -52,8 +52,8 @@ export function SecurityProvider({ children }: { children: React.ReactNode }) {
   const [sessionTimeout, setSessionTimeout] = useState(DEFAULT_SESSION_TIMEOUT);
   const [enableSecurityFeatures, setEnableSecurityFeatures] = useState(true);
   
-  // Real-time updates
-  const [isRealTimeEnabled, setRealTimeEnabled] = useState(true);
+  // Real-time updates - disabled by default to prevent DB connection limit issues
+  const [isRealTimeEnabled, setRealTimeEnabled] = useState(false);
   const [lastUpdate, setLastUpdate] = useState(Date.now());
   
   // Refs

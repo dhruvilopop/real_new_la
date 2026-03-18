@@ -43,8 +43,8 @@ export default function NotificationBell() {
 
   useEffect(() => {
     fetchNotifications();
-    const interval = setInterval(fetchNotifications, 30000);
-    return () => clearInterval(interval);
+    // Removed interval polling to prevent DB connection limit issues
+    // User can manually refresh by clicking the bell icon
   }, [fetchNotifications]);
 
   const handleMarkAsRead = async (id: string) => {

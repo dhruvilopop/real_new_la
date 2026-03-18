@@ -156,7 +156,7 @@ export default function AccountantDashboard() {
   
   // Real-time Updates State
   const [lastUpdate, setLastUpdate] = useState(Date.now());
-  const [isRealTimeEnabled, setIsRealTimeEnabled] = useState(true);
+  const [isRealTimeEnabled, setIsRealTimeEnabled] = useState(false); // Disabled by default to prevent DB connection limit
   const realTimeIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
   // Activity Tracking State
