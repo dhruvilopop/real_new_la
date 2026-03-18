@@ -115,6 +115,11 @@ export default function CustomerLoanDetailPage() {
   const [selectedEmi, setSelectedEmi] = useState<EMISchedule | null>(null);
   const [paymentSettings, setPaymentSettings] = useState<PaymentSettings | null>(null);
   const [bankDetails, setBankDetails] = useState<BankDetails | null>(null);
+  const [emiSpecificSettings, setEmiSpecificSettings] = useState<{
+    enableFullPayment: boolean;
+    enablePartialPayment: boolean;
+    enableInterestOnly: boolean;
+  } | null>(null);
   
   // Payment dialogs
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
@@ -170,6 +175,24 @@ export default function CustomerLoanDetailPage() {
       console.error('Error fetching payment settings:', error);
     }
   }, [loanId]);
+
+  // Fetch EMI-specific payment settings
+  const fetchEmiSpecificSettings = useCallback(async (emiScheduleId: string) => {
+    try {
+      const response = await fetch(`/api/emi-payment-settings?emiScheduleId=${emiScheduleId}`);
+      const data = await response.json();
+      if (data.success && data.settings) {
+        setEmiSpecificSettings({
+          enableFullPayment: data.settings.enableFullPayment,
+          enablePartialPayment: data.settings.enablePartialPayment,
+          enableInterestOnly: data.settings.enableInterestOnly
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching EMI specific settings:', error);
+      setEmiSpecificSettings(null);
+    }
+  }, []);
 
   useEffect(() => {
     fetchLoanDetails();
@@ -734,12 +757,13 @@ export default function CustomerLoanDetailPage() {
                       onClick={() => {
                         if (!isPaid && canPay) {
                           setSelectedEmi(emi);
+                          fetchEmiSpecificSettings(emi.id);
                           setShowPaymentDialog(true);
                         } else if (!isPaid && !canPay) {
-                          toast({ 
-                            title: 'Sequential Payment Required', 
+                          toast({
+                            title: 'Sequential Payment Required',
                             description: reason,
-                            variant: 'destructive' 
+                            variant: 'destructive'
                           });
                         }
                       }}
@@ -932,7 +956,7 @@ export default function CustomerLoanDetailPage() {
           
           <div className="space-y-3 py-4">
             {/* Full Payment Option */}
-            {(!paymentSettings || paymentSettings.enableFullPayment) && (
+            {(emiSpecificSettings?.enableFullPayment ?? (!paymentSettings || paymentSettings.enableFullPayment)) && (
               <Button 
                 className="w-full h-16 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600"
                 onClick={() => {
@@ -957,7 +981,7 @@ export default function CustomerLoanDetailPage() {
             <div className="text-center text-sm text-gray-500">— or choose flexible payment —</div>
             
             {/* Partial Payment Option */}
-            {(!paymentSettings || paymentSettings.enablePartialPayment) && selectedEmi && (selectedEmi.partialPaymentCount || 0) < 2 && (
+            {(emiSpecificSettings?.enablePartialPayment ?? (!paymentSettings || paymentSettings.enablePartialPayment)) && selectedEmi && (selectedEmi.partialPaymentCount || 0) < 2 && (
               <Button 
                 variant="outline"
                 className="w-full h-16 border-amber-300 hover:bg-amber-50"
@@ -978,7 +1002,7 @@ export default function CustomerLoanDetailPage() {
             )}
 
             {/* Warning if partial payment count reached */}
-            {selectedEmi && (selectedEmi.partialPaymentCount || 0) >= 2 && (!paymentSettings || paymentSettings.enablePartialPayment) && (
+            {selectedEmi && (selectedEmi.partialPaymentCount || 0) >= 2 && (emiSpecificSettings?.enablePartialPayment ?? (!paymentSettings || paymentSettings.enablePartialPayment)) && (
               <Alert className="bg-orange-50 border-orange-200">
                 <AlertCircle className="h-4 w-4 text-orange-600" />
                 <AlertDescription className="text-orange-700 text-sm">
@@ -988,7 +1012,7 @@ export default function CustomerLoanDetailPage() {
             )}
             
             {/* Interest Only Option */}
-            {(!paymentSettings || paymentSettings.enableInterestOnly) && selectedEmi && !selectedEmi.isPartialPayment && selectedEmi.paidAmount === 0 && (
+            {(emiSpecificSettings?.enableInterestOnly ?? (!paymentSettings || paymentSettings.enableInterestOnly)) && selectedEmi && !selectedEmi.isPartialPayment && selectedEmi.paidAmount === 0 && (
               <Button 
                 variant="outline"
                 className="w-full h-16 border-purple-300 hover:bg-purple-50"

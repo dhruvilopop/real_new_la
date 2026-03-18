@@ -119,3 +119,141 @@ How the Payment Flow Works Now:
 4. Customer can scan QR or use UPI ID to make payment
 
 ---
+Task ID: 4
+Agent: Main Agent
+Task: Fix Per-EMI Payment Settings Not Being Applied in Customer Payment Dialog
+
+Work Log:
+- Identified issue: Per-EMI settings from EMIPaymentSetting model were not being fetched when customer opens payment dialog
+- The payment options (Full/Partial/Interest Only) were only checking global settings, not per-EMI settings
+- Added `emiSpecificSettings` state to CustomerLoanDetailPage to store per-EMI settings
+- Created `fetchEmiSpecificSettings()` function to fetch settings from `/api/emi-payment-settings?emiScheduleId=xxx`
+- Updated payment dialog open handler to fetch EMI-specific settings when EMI is selected
+- Updated payment option conditions to use EMI-specific settings with fallback to global settings:
+  - Full Payment: `(emiSpecificSettings?.enableFullPayment ?? (!paymentSettings || paymentSettings.enableFullPayment))`
+  - Partial Payment: `(emiSpecificSettings?.enablePartialPayment ?? (!paymentSettings || paymentSettings.enablePartialPayment))`
+  - Interest Only: `(emiSpecificSettings?.enableInterestOnly ?? (!paymentSettings || paymentSettings.enableInterestOnly))`
+
+Stage Summary:
+- Per-EMI payment settings now properly applied when customer views payment options
+- If EMI has specific settings, those are used; otherwise falls back to global/company settings
+- Admin/Accountant can now control payment options for each individual EMI
+- Git commits:
+  - (pending): fix: apply per-EMI payment settings in customer payment dialog
+
+Key Files Modified:
+1. /src/components/customer/CustomerLoanDetailPage.tsx - Added EMI-specific settings fetch and application
+
+---
+
+# COMPLETE SESSION SUMMARY
+
+## Features Implemented Today
+
+### 1. Per-EMI Payment Option Toggle ✅
+**What it does:** Admin/Accountant can control which payment types are available for each individual EMI
+**Files:**
+- `/src/components/customer/EMISettingsDialog.tsx` - Dialog component with toggles
+- `/src/app/api/emi-payment-settings/route.ts` - API for CRUD operations
+- `/src/components/customer/CustomerLoanDetailPage.tsx` - Settings button on each EMI
+
+**How to Check:**
+1. Login as Customer
+2. Go to any active loan
+3. You will see a Settings (⚙️) icon on each EMI row
+4. Click Settings icon to open the dialog
+5. Toggle Full Payment / Partial Payment / Interest Only options
+6. Save settings
+7. Now click on that EMI to pay - you will only see the enabled payment options
+
+### 2. Company Bank Account System ✅
+**What it does:** Accountant can manage company bank accounts with UPI ID, QR Code, and set default account
+**Files:**
+- `/src/components/accountant/AccountantDashboard.tsx` - Bank account management UI
+- `/src/app/api/bank-account/route.ts` - API with UPI ID, QR Code, isDefault fields
+- `/src/app/api/payment-request/route.ts` - Returns default bank account details to customer
+
+**How to Check:**
+1. Login as Accountant
+2. Go to "Bank Accounts" section
+3. Click "Add Bank Account"
+4. Fill in: Bank Name, Account Number, Account Name, IFSC Code, Branch Name
+5. Fill in Payment Settings: UPI ID (e.g., company@upi), QR Code URL
+6. Check "Set as Default Account"
+7. Save
+
+### 3. Customer Payment Page Shows Company Bank Details ✅
+**What it does:** When customer clicks "Pay EMI", they see company's default bank account details
+**Files:**
+- `/src/components/customer/CustomerLoanDetailPage.tsx` - Payment dialog with bank details
+- `/src/app/api/payment-request/route.ts` - Fetches default bank account
+
+**How to Check:**
+1. Login as Customer
+2. Go to any active loan
+3. Click on an EMI to pay
+4. Payment dialog shows: UPI ID, QR Code image, Bank Name, Account Number, IFSC Code
+
+### 4. Secondary Payment Pages (Display Only) ✅
+**What it does:** Create additional payment pages for display purposes (money still tracked in default account)
+**Files:**
+- `/src/app/api/emi-payment-settings/route.ts` - API with PUT endpoint for secondary pages
+- Prisma model: `SecondaryPaymentPage`
+
+**How to Check:**
+1. Use API: POST /api/emi-payment-settings with action=secondary-pages
+2. Secondary pages can be selected in EMI Settings dialog
+
+### 5. TypeScript Errors Fixed ✅
+All TypeScript errors resolved, build passes successfully
+
+---
+
+## Database Models Used
+
+### EMIPaymentSetting Model
+```prisma
+model EMIPaymentSetting {
+  emiScheduleId          String   @unique
+  enableFullPayment      Boolean  @default(true)
+  enablePartialPayment   Boolean  @default(true)
+  enableInterestOnly     Boolean  @default(true)
+  useDefaultCompanyPage  Boolean  @default(true)
+  secondaryPaymentPageId String?
+}
+```
+
+### SecondaryPaymentPage Model
+```prisma
+model SecondaryPaymentPage {
+  name          String
+  upiId         String?
+  qrCodeUrl     String?
+  bankName      String?
+  accountNumber String?
+}
+```
+
+### BankAccount Model (Enhanced)
+```prisma
+model BankAccount {
+  bankName      String
+  accountNumber String
+  ifscCode      String?
+  branchName    String?
+  upiId         String?   // NEW
+  qrCodeUrl     String?   // NEW
+  isDefault     Boolean   @default(false)  // NEW
+}
+```
+
+---
+
+## Git Commits This Session
+1. `3defd35` - fix: resolve TypeScript type errors
+2. `e096488` - feat: integrate company bank account with payment settings
+3. `f9d4d03` - fix: resolve TypeScript type error in payment-request API
+4. `3478202` - docs: update worklog with session changes
+5. (pending) - fix: apply per-EMI payment settings in customer payment dialog
+
+---
