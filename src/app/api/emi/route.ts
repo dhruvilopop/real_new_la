@@ -43,7 +43,35 @@ export async function GET(request: NextRequest) {
 
     const schedules = await db.eMISchedule.findMany({
       where,
-      orderBy: { installmentNumber: 'asc' }
+      orderBy: { installmentNumber: 'asc' },
+      select: {
+        id: true,
+        installmentNumber: true,
+        dueDate: true,
+        originalDueDate: true,
+        principalAmount: true,
+        interestAmount: true,
+        totalAmount: true,
+        outstandingPrincipal: true,
+        outstandingInterest: true,
+        paymentStatus: true,
+        paidAmount: true,
+        paidPrincipal: true,
+        paidInterest: true,
+        paidDate: true,
+        penaltyAmount: true,
+        daysOverdue: true,
+        isPartialPayment: true,
+        nextPaymentDate: true,
+        isInterestOnly: true,
+        principalDeferred: true,
+        partialPaymentCount: true,
+        remainingAmount: true,
+        notes: true,
+        paymentMode: true,
+        paymentReference: true,
+        proofUrl: true
+      }
     });
 
     // Calculate summary

@@ -47,6 +47,7 @@ interface EMISchedule {
   principalDeferred?: boolean;
   partialPaymentCount?: number;
   remainingAmount?: number;
+  partialPaymentNumber?: number;
 }
 
 interface PaymentSettings {
@@ -769,15 +770,46 @@ export default function CustomerLoanDetailPage() {
                             <p className="text-sm text-gray-500">
                               Due: {formatDate(emi.dueDate)}
                             </p>
-                            {isPartial && emi.nextPaymentDate && (
-                              <p className="text-xs text-orange-600 mt-1">
-                                Remaining: {formatCurrency(emi.remainingAmount || 0)} due on {formatDate(emi.nextPaymentDate)}
-                              </p>
-                            )}
-                            {emi.partialPaymentCount && emi.partialPaymentCount > 0 && (
-                              <p className="text-xs text-orange-500 mt-1">
-                                Partial payments: {emi.partialPaymentCount}/2
-                              </p>
+                            {/* Show partial payment details */}
+                            {isPartial && (
+                              <div className="mt-2 p-2 bg-orange-50 rounded-md border border-orange-200">
+                                <p className="text-xs font-medium text-orange-700">
+                                  Partial Payment Progress
+                                </p>
+                                <div className="mt-1 space-y-1">
+                                  <div className="flex justify-between text-xs">
+                                    <span className="text-gray-600">Total EMI:</span>
+                                    <span className="font-medium">{formatCurrency(emi.totalAmount)}</span>
+                                  </div>
+                                  <div className="flex justify-between text-xs">
+                                    <span className="text-emerald-600">Already Paid:</span>
+                                    <span className="font-medium text-emerald-600">{formatCurrency(emi.paidAmount || 0)}</span>
+                                  </div>
+                                  <div className="flex justify-between text-xs">
+                                    <span className="text-orange-600 font-medium">Remaining:</span>
+                                    <span className="font-bold text-orange-600">{formatCurrency(emi.totalAmount - (emi.paidAmount || 0))}</span>
+                                  </div>
+                                  {emi.nextPaymentDate && (
+                                    <p className="text-xs text-orange-600 mt-1">
+                                      Next payment due: {formatDate(emi.nextPaymentDate)}
+                                    </p>
+                                  )}
+                                </div>
+                                <div className="mt-2 flex items-center gap-1">
+                                  <div className="flex-1 bg-orange-200 rounded-full h-2">
+                                    <div 
+                                      className="bg-orange-500 h-2 rounded-full" 
+                                      style={{ width: `${((emi.paidAmount || 0) / emi.totalAmount) * 100}%` }}
+                                    ></div>
+                                  </div>
+                                  <span className="text-xs text-orange-600 font-medium">
+                                    {Math.round(((emi.paidAmount || 0) / emi.totalAmount) * 100)}%
+                                  </span>
+                                </div>
+                                <p className="text-xs text-orange-600 mt-1">
+                                  Partial payments: {emi.partialPaymentCount || 0}/2 used
+                                </p>
+                              </div>
                             )}
                             {!isPaid && !canPay && (
                               <p className="text-xs text-red-500 mt-1">{reason}</p>
@@ -833,9 +865,26 @@ export default function CustomerLoanDetailPage() {
           <DialogHeader>
             <DialogTitle>Pay EMI #{selectedEmi?.installmentNumber}</DialogTitle>
             <DialogDescription>
-              Due: {selectedEmi && formatDate(selectedEmi.dueDate)} • Amount: {selectedEmi && formatCurrency(selectedEmi.totalAmount)}
+              Due: {selectedEmi && formatDate(selectedEmi.dueDate)} • Total: {selectedEmi && formatCurrency(selectedEmi.totalAmount)}
             </DialogDescription>
           </DialogHeader>
+          
+          {/* Show Partial Payment Summary if exists */}
+          {selectedEmi && selectedEmi.paidAmount > 0 && (
+            <Alert className="bg-amber-50 border-amber-200">
+              <AlertCircle className="h-4 w-4 text-amber-600" />
+              <AlertDescription className="text-amber-700">
+                <div className="space-y-1">
+                  <p className="font-semibold">Partial Payment Summary:</p>
+                  <div className="text-sm space-y-1">
+                    <p>• Already Paid: {formatCurrency(selectedEmi.paidAmount)}</p>
+                    <p>• Remaining Balance: <strong>{formatCurrency(selectedEmi.totalAmount - selectedEmi.paidAmount)}</strong></p>
+                    <p>• Partial Payments Used: {selectedEmi.partialPaymentCount || 0}/2</p>
+                  </div>
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
           
           <div className="space-y-3 py-4">
             {/* Full Payment Option */}
@@ -851,7 +900,12 @@ export default function CustomerLoanDetailPage() {
                 <div className="flex flex-col items-center">
                   <IndianRupee className="h-5 w-5 mb-1" />
                   <span className="font-semibold">Pay Full EMI</span>
-                  <span className="text-xs opacity-80">{selectedEmi && formatCurrency(selectedEmi.totalAmount)}</span>
+                  <span className="text-xs opacity-80">
+                    {selectedEmi && selectedEmi.paidAmount > 0 
+                      ? `${formatCurrency(selectedEmi.totalAmount - selectedEmi.paidAmount)} (Remaining)`
+                      : selectedEmi && formatCurrency(selectedEmi.totalAmount)
+                    }
+                  </span>
                 </div>
               </Button>
             )}
@@ -884,13 +938,13 @@ export default function CustomerLoanDetailPage() {
               <Alert className="bg-orange-50 border-orange-200">
                 <AlertCircle className="h-4 w-4 text-orange-600" />
                 <AlertDescription className="text-orange-700 text-sm">
-                  You have used both partial payments for this EMI. Full payment required.
+                  You have used both partial payments for this EMI. Full payment of {formatCurrency(selectedEmi.totalAmount - selectedEmi.paidAmount)} required.
                 </AlertDescription>
               </Alert>
             )}
             
             {/* Interest Only Option */}
-            {(!paymentSettings || paymentSettings.enableInterestOnly) && selectedEmi && !selectedEmi.isPartialPayment && (
+            {(!paymentSettings || paymentSettings.enableInterestOnly) && selectedEmi && !selectedEmi.isPartialPayment && selectedEmi.paidAmount === 0 && (
               <Button 
                 variant="outline"
                 className="w-full h-16 border-purple-300 hover:bg-purple-50"
