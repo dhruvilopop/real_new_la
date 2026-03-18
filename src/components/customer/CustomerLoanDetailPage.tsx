@@ -218,9 +218,6 @@ export default function CustomerLoanDetailPage() {
 
   // Submit payment request
   const handleSubmitPayment = async () => {
-    // VISIBLE DEBUG: Show toast to confirm function is called
-    toast({ title: 'Processing...', description: 'Submitting your payment request', variant: 'default' });
-    
     console.log('=== handleSubmitPayment STARTED ===');
     console.log('Form values:', {
       selectedEmi: selectedEmi?.id,
@@ -1195,10 +1192,7 @@ export default function CustomerLoanDetailPage() {
               <Button 
                 type="button"
                 className="flex-1 bg-emerald-500 hover:bg-emerald-600"
-                onClick={() => {
-                  alert('BUTTON CLICKED!');
-                  handleSubmitPayment();
-                }}
+                onClick={handleSubmitPayment}
                 disabled={paymentLoading || uploadingProof}
               >
                 {paymentLoading || uploadingProof ? (
