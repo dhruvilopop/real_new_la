@@ -53,6 +53,48 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'EMI already paid' }, { status: 400 });
     }
 
+    // Sequential Payment Validation - Check if previous EMIs are paid
+    const previousEmis = await db.eMISchedule.findMany({
+      where: {
+        loanApplicationId: loanId,
+        installmentNumber: { lt: emiSchedule.installmentNumber },
+        paymentStatus: { not: 'PAID' }
+      }
+    });
+
+    if (previousEmis.length > 0) {
+      const unpaidEmiNumbers = previousEmis.map(e => e.installmentNumber).sort((a, b) => a - b);
+      return NextResponse.json({ 
+        error: 'Sequential payment required',
+        message: `Please pay EMI #${unpaidEmiNumbers[0]} first before paying this EMI`,
+        unpaidEmis: unpaidEmiNumbers
+      }, { status: 400 });
+    }
+
+    // Check if partial payment is allowed for this EMI
+    if (paymentType === 'PARTIAL' && emiSchedule.allowPartialPayment === false) {
+      return NextResponse.json({ 
+        error: 'Partial payment not allowed',
+        message: 'Partial payment is disabled for this EMI. Please pay full amount.'
+      }, { status: 400 });
+    }
+
+    // Check if interest only payment is allowed for this EMI
+    if (paymentType === 'INTEREST_ONLY' && emiSchedule.allowInterestOnly === false) {
+      return NextResponse.json({ 
+        error: 'Interest only payment not allowed',
+        message: 'Interest only payment is disabled for this EMI. Please pay full amount.'
+      }, { status: 400 });
+    }
+
+    // Check if EMI already has partial payment - disable interest only option
+    if (paymentType === 'INTEREST_ONLY' && emiSchedule.isPartialPayment) {
+      return NextResponse.json({ 
+        error: 'Interest only not available after partial payment',
+        message: 'This EMI has a partial payment. Interest only option is not available.'
+      }, { status: 400 });
+    }
+
     const loan = emiSchedule.loanApplication;
     const paymentAmount = parseFloat(amount.toString());
     const totalAmount = emiSchedule.totalAmount;

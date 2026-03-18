@@ -10,4 +10,4 @@ export const db = new PrismaClient({
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = db
 
-// Force rebuild - credit system v1
+// MySQL connected to Hostinger database

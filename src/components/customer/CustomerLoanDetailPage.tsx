@@ -297,6 +297,37 @@ export default function CustomerLoanDetailPage() {
   const totalPaid = paidEmis.reduce((sum, e) => sum + e.paidAmount, 0);
   const totalOutstanding = pendingEmis.reduce((sum, e) => sum + (e.totalAmount - e.paidAmount), 0) + overdueEmis.reduce((sum, e) => sum + e.totalAmount, 0);
 
+  // Sequential EMI Payment - Check if this EMI can be paid
+  const canPayEmi = (emi: EMISchedule) => {
+    // If already paid, no need to pay
+    if (emi.paymentStatus === 'PAID') return { canPay: false, reason: 'Already paid' };
+    
+    // Find the first unpaid EMI
+    const sortedEmis = [...emiSchedules].sort((a, b) => a.installmentNumber - b.installmentNumber);
+    const firstUnpaidEmi = sortedEmis.find(e => e.paymentStatus !== 'PAID');
+    
+    // If this is the first unpaid EMI, allow payment
+    if (firstUnpaidEmi && firstUnpaidEmi.id === emi.id) {
+      return { canPay: true, reason: '' };
+    }
+    
+    // If trying to pay an EMI before the first unpaid one
+    if (firstUnpaidEmi && emi.installmentNumber > firstUnpaidEmi.installmentNumber) {
+      return { 
+        canPay: false, 
+        reason: `Please pay EMI #${firstUnpaidEmi.installmentNumber} first` 
+      };
+    }
+    
+    return { canPay: true, reason: '' };
+  };
+
+  // Get first unpaid EMI for sequential payment
+  const getFirstUnpaidEmi = () => {
+    const sortedEmis = [...emiSchedules].sort((a, b) => a.installmentNumber - b.installmentNumber);
+    return sortedEmis.find(e => e.paymentStatus !== 'PAID');
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -478,19 +509,22 @@ export default function CustomerLoanDetailPage() {
           </CardContent>
         </Card>
 
-        {/* EMI Schedule */}
+        {/* EMI Schedule - Customer sees only EMI numbers, no money */}
         <Card className="border-0 shadow-sm">
           <CardHeader>
             <CardTitle className="text-lg">EMI Schedule</CardTitle>
-            <CardDescription>Click on pending EMI to make payment</CardDescription>
+            <CardDescription>Click on pending EMI to make payment (must pay in order)</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             <ScrollArea className="h-[400px]">
               <div className="divide-y">
-                {emiSchedules.map((emi, index) => {
+                {emiSchedules.sort((a, b) => a.installmentNumber - b.installmentNumber).map((emi, index) => {
                   const isPaid = emi.paymentStatus === 'PAID';
                   const isOverdue = emi.paymentStatus === 'OVERDUE';
                   const isPartial = emi.paymentStatus === 'PARTIALLY_PAID';
+                  const { canPay, reason } = canPayEmi(emi);
+                  const firstUnpaid = getFirstUnpaidEmi();
+                  const isNextToPay = firstUnpaid && firstUnpaid.id === emi.id;
                   
                   return (
                     <motion.div
@@ -498,31 +532,40 @@ export default function CustomerLoanDetailPage() {
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: index * 0.05 }}
-                      className={`p-4 ${!isPaid ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+                      className={`p-4 ${!isPaid && canPay ? 'cursor-pointer hover:bg-gray-50' : ''} ${!isPaid && !canPay ? 'opacity-60 bg-gray-50' : ''}`}
                       onClick={() => {
-                        if (!isPaid) {
+                        if (!isPaid && canPay) {
                           setSelectedEmi(emi);
                           setShowPaymentDialog(true);
+                        } else if (!isPaid && !canPay) {
+                          toast({ 
+                            title: 'Sequential Payment Required', 
+                            description: reason,
+                            variant: 'destructive' 
+                          });
                         }
                       }}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
-                          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                            isPaid ? 'bg-emerald-100' : isOverdue ? 'bg-red-100' : 'bg-amber-100'
+                          <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                            isPaid ? 'bg-emerald-100' : isOverdue ? 'bg-red-100' : isNextToPay ? 'bg-amber-100 ring-2 ring-amber-400' : 'bg-gray-100'
                           }`}>
                             {isPaid ? (
-                              <CheckCircle className="h-5 w-5 text-emerald-600" />
+                              <CheckCircle className="h-6 w-6 text-emerald-600" />
                             ) : isOverdue ? (
-                              <AlertTriangle className="h-5 w-5 text-red-600" />
+                              <AlertTriangle className="h-6 w-6 text-red-600" />
                             ) : (
-                              <span className="font-semibold text-amber-600">#{emi.installmentNumber}</span>
+                              <span className={`font-bold ${isNextToPay ? 'text-amber-600' : 'text-gray-400'}`}>#{emi.installmentNumber}</span>
                             )}
                           </div>
                           <div>
                             <div className="flex items-center gap-2">
                               <p className="font-semibold">EMI #{emi.installmentNumber}</p>
                               {getStatusBadge(emi.paymentStatus)}
+                              {isNextToPay && !isPaid && (
+                                <Badge className="bg-amber-500 text-white text-xs">Pay Next</Badge>
+                              )}
                               {isPartial && emi.nextPaymentDate && (
                                 <span className="text-xs text-gray-500">
                                   Next: {formatDate(emi.nextPaymentDate)}
@@ -532,24 +575,34 @@ export default function CustomerLoanDetailPage() {
                             <p className="text-sm text-gray-500">
                               Due: {formatDate(emi.dueDate)}
                             </p>
+                            {!isPaid && !canPay && (
+                              <p className="text-xs text-red-500 mt-1">{reason}</p>
+                            )}
                           </div>
                         </div>
                         
                         <div className="text-right">
-                          <p className="font-bold text-lg">{formatCurrency(emi.totalAmount)}</p>
+                          {/* Hide money amount - only show status */}
                           {isPaid && emi.paidDate && (
-                            <p className="text-xs text-emerald-600">Paid: {formatDate(emi.paidDate)}</p>
+                            <div className="flex items-center gap-1 text-emerald-600">
+                              <CheckCircle className="h-4 w-4" />
+                              <span className="text-sm">Paid</span>
+                            </div>
                           )}
                           {isPartial && (
-                            <p className="text-xs text-orange-600">
-                              Paid: {formatCurrency(emi.paidAmount)}
-                            </p>
+                            <div className="flex items-center gap-1 text-orange-600">
+                              <Clock className="h-4 w-4" />
+                              <span className="text-sm">Partial</span>
+                            </div>
                           )}
                           {isOverdue && emi.daysOverdue > 0 && (
-                            <p className="text-xs text-red-600">{emi.daysOverdue} days overdue</p>
+                            <div className="flex items-center gap-1 text-red-600">
+                              <AlertTriangle className="h-4 w-4" />
+                              <span className="text-sm">{emi.daysOverdue}d overdue</span>
+                            </div>
                           )}
-                          {!isPaid && (
-                            <ChevronRight className="h-5 w-5 text-gray-400 ml-auto mt-1" />
+                          {!isPaid && canPay && (
+                            <ChevronRight className="h-5 w-5 text-amber-500 ml-auto" />
                           )}
                         </div>
                       </div>
@@ -571,9 +624,22 @@ export default function CustomerLoanDetailPage() {
           <DialogHeader>
             <DialogTitle>Pay EMI #{selectedEmi?.installmentNumber}</DialogTitle>
             <DialogDescription>
-              Due: {selectedEmi && formatDate(selectedEmi.dueDate)} • Amount: {selectedEmi && formatCurrency(selectedEmi.totalAmount)}
+              Due: {selectedEmi && formatDate(selectedEmi.dueDate)}
             </DialogDescription>
           </DialogHeader>
+          
+          {/* Sequential payment warning */}
+          {selectedEmi && (() => {
+            const { canPay, reason } = canPayEmi(selectedEmi);
+            return !canPay ? (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+                <div className="flex items-center gap-2 text-red-600">
+                  <AlertTriangle className="h-5 w-5" />
+                  <span className="font-medium">{reason}</span>
+                </div>
+              </div>
+            ) : null;
+          })()}
           
           <div className="space-y-3 py-4">
             {/* Full Payment Option */}

@@ -614,26 +614,31 @@ export default function LoanDetailPanel({ loanId, open, onClose, onEMIPaid, user
 
   return (
     <>
-    <AnimatePresence mode="wait">
+    {/* Backdrop Overlay */}
+    <AnimatePresence>
       {shouldRender && (
-        <>
-          {/* Backdrop Overlay */}
-          <motion.div
-            key="loan-backdrop"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 z-40"
-            onClick={onClose}
-          />
-          <motion.div
-            key={`loan-panel-${loanId}`}
-            initial={{ x: '100%' }}
-            animate={{ x: 0 }}
-            exit={{ x: '100%' }}
-            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="fixed right-0 top-0 h-full w-full md:w-[600px] lg:w-[700px] bg-white shadow-2xl z-50 flex flex-col"
-          >
+        <motion.div
+          key="loan-backdrop"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black/50 z-40"
+          onClick={onClose}
+        />
+      )}
+    </AnimatePresence>
+    
+    {/* Main Panel */}
+    <AnimatePresence>
+      {shouldRender && (
+        <motion.div
+          key={`loan-panel-${loanId || 'empty'}`}
+          initial={{ x: '100%' }}
+          animate={{ x: 0 }}
+          exit={{ x: '100%' }}
+          transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+          className="fixed right-0 top-0 h-full w-full md:w-[600px] lg:w-[700px] bg-white shadow-2xl z-50 flex flex-col"
+        >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-emerald-600 to-teal-600 text-white">
           <div className="flex items-center gap-3">
@@ -1637,11 +1642,10 @@ export default function LoanDetailPanel({ loanId, open, onClose, onEMIPaid, user
           </div>
         )}
       </motion.div>
-      </>
-    )}
-  </AnimatePresence>
+      )}
+    </AnimatePresence>
 
-  {/* EMI Payment Dialog - Outside AnimatePresence to avoid key conflicts */}
+  {/* EMI Payment Dialog */}
   <Dialog open={showEMIPaymentDialog} onOpenChange={setShowEMIPaymentDialog}>
           <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader>

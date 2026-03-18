@@ -31,7 +31,11 @@ yarn-error.log*
 .pnpm-debug.log*
 
 # env files (can opt-in for committing if needed)
-.env*
+.env
+.env.local
+.env.*.local
+# Allow .env.example to be committed
+!.env.example
 
 # vercel
 .vercel
@@ -49,3 +53,17 @@ prompt
 server.log
 # Skills directory
 /skills/
+
+# Database files
+db/*.db
+db/*.db-journal
+*.sqlite
+*.sqlite3
+
+# Upload folder (keep structure but ignore content)
+upload/*
+!upload/.gitkeep
+
+# Logs
+*.log
+logs/

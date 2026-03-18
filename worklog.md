@@ -337,3 +337,51 @@ Work Log:
 ---
 
 *End of worklog*
+
+---
+## 📝 CURRENT SESSION - USER MANAGEMENT & CUSTOMER SECTION
+
+---
+Task ID: 8
+Agent: main-agent
+Task: User Management Improvements & Customer Section
+
+Work Log:
+- [x] Added "Customers" menu item in SuperAdmin sidebar
+- [x] Created dedicated Customer section with A-Z details
+- [x] Removed CUSTOMER from user management role filter
+- [x] Fixed toast duration to 2 seconds (was 1000000ms, now 2000ms)
+- [x] User details dialog shows complete info including:
+  - Basic information (email, phone, role, status)
+  - Company and Personal credit balances
+  - Codes (agentCode, staffCode, cashierCode, accountantCode)
+  - Role-specific statistics
+  - Activity summary (loan applications, payments, audit logs)
+  - Recent activity timeline
+- [x] Customer section shows:
+  - Total customers count
+  - Active customers count
+  - Customers with active loans
+  - Total loan applications
+  - Customer table with loan details per customer
+- [x] Agent already correctly shows only their own staff (not all staff)
+- [x] Reset System button is visible in Settings tab for SuperAdmin
+- [x] All TypeScript errors fixed
+- [x] Lint passes with no errors
+
+Files Modified:
+1. src/components/layout/DashboardLayout.tsx - Added 'customers' menu item
+2. src/components/admin/SuperAdminDashboard.tsx - Added customers section, removed CUSTOMER filter
+3. src/hooks/use-toast.ts - Fixed toast duration to 2 seconds
+4. src/app/api/system/reset/route.ts - Fixed foreign key constraint order for system reset
+
+Stage Summary:
+- Customers have a dedicated section now with full loan history
+- Toast notifications auto-dismiss in 2 seconds
+- User management no longer shows CUSTOMER in role filter
+- System Reset now works correctly (fixed foreign key constraint order)
+- All validations pass (lint: ✅)
+- Dev server running without errors
+
+---
+*End of current session*

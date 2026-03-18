@@ -409,6 +409,7 @@ export const ROLE_MENU_ITEMS: Record<string, MenuItem[]> = {
     { id: 'myCredit', label: 'My Credit', icon: IndianRupee },
     { id: 'creditManagement', label: 'Credit Management', icon: CreditCard },
     { id: 'users', label: 'User Management', icon: Users },
+    { id: 'customers', label: 'Customers', icon: User },
     { id: 'companies', label: 'Companies', icon: Building2 },
     { id: 'locationHistory', label: 'Location History', icon: MapPin },
     { id: 'analytics', label: 'Analytics', icon: BarChart3 },

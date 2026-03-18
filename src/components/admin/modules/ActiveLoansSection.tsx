@@ -8,9 +8,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Switch } from '@/components/ui/switch';
 import { 
   Wallet, DollarSign, FileText, Receipt, RefreshCw, Trash2, Eye, 
-  Calendar, IndianRupee, Clock, AlertTriangle, ChevronDown, ChevronUp, Edit
+  Calendar, IndianRupee, Clock, AlertTriangle, ChevronDown, ChevronUp, Edit,
+  Settings, ToggleLeft, ToggleRight
 } from 'lucide-react';
 import { formatCurrency, formatDate } from '@/utils/helpers';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -96,8 +98,41 @@ export function ActiveLoansSection({
   const [processing, setProcessing] = useState(false);
   const [emiDateReason, setEmiDateReason] = useState('');
 
+  // EMI Settings State
+  const [emiSettings, setEmiSettings] = useState<{[key: string]: {
+    allowPartialPayment: boolean;
+    allowInterestOnly: boolean;
+    autoAdjustDates: boolean;
+  }}>({});
+
   // Accountant cannot manage EMIs
   const canManageEmi = userRole !== 'ACCOUNTANT';
+
+  // Update EMI setting
+  const updateEmiSetting = async (emiId: string, field: string, value: boolean) => {
+    try {
+      const response = await fetch('/api/emi/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ emiId, [field]: value })
+      });
+      
+      if (response.ok) {
+        setEmiSettings(prev => ({
+          ...prev,
+          [emiId]: {
+            ...prev[emiId],
+            [field]: value
+          }
+        }));
+        toast({ title: 'Setting Updated', description: `${field} has been ${value ? 'enabled' : 'disabled'}` });
+      } else {
+        toast({ title: 'Error', description: 'Failed to update setting', variant: 'destructive' });
+      }
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to update setting', variant: 'destructive' });
+    }
+  };
 
   const filteredLoans = loans.filter(loan => {
     if (filter === 'all') return true;
@@ -479,57 +514,108 @@ export function ActiveLoansSection({
                           <div className="p-4 bg-white/50">
                             <h5 className="font-medium text-gray-700 mb-3">EMI Schedule</h5>
                             {loan.emiSchedules && loan.emiSchedules.length > 0 ? (
-                              <div className="grid gap-2">
-                                {loan.emiSchedules.slice(0, 6).map((emi: any, idx: number) => (
-                                  <div 
-                                    key={emi.id || idx}
-                                    className={`flex items-center justify-between p-3 rounded-lg ${
-                                      emi.paymentStatus === 'PAID' ? 'bg-green-50 border border-green-100' :
-                                      emi.paymentStatus === 'OVERDUE' ? 'bg-red-50 border border-red-100' :
-                                      'bg-gray-50 border border-gray-100'
-                                    }`}
-                                  >
-                                    <div className="flex items-center gap-3">
-                                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium ${
-                                        emi.paymentStatus === 'PAID' ? 'bg-green-200 text-green-700' :
-                                        emi.paymentStatus === 'OVERDUE' ? 'bg-red-200 text-red-700' :
-                                        'bg-gray-200 text-gray-700'
-                                      }`}>
-                                        #{emi.installmentNumber}
-                                      </div>
-                                      <div>
-                                        <p className="text-sm font-medium">{formatDate(emi.dueDate)}</p>
-                                        <p className="text-xs text-gray-500">
-                                          {emi.paymentStatus === 'PAID' ? 'Paid' : 
-                                           emi.paymentStatus === 'OVERDUE' ? 'Overdue' : 'Pending'}
-                                        </p>
-                                      </div>
-                                    </div>
-                                    <div className="flex items-center gap-3">
-                                      <p className="font-medium">{formatCurrency(emi.totalAmount)}</p>
-                                      {canManageEmi && emi.paymentStatus !== 'PAID' && (
-                                        <div className="flex gap-1">
-                                          <Button 
-                                            size="sm" 
-                                            variant="ghost"
-                                            className="h-7 w-7 p-0"
-                                            onClick={() => handlePayEmi(loan, emi)}
-                                          >
-                                            <IndianRupee className="h-3 w-3" />
-                                          </Button>
-                                          <Button 
-                                            size="sm" 
-                                            variant="ghost"
-                                            className="h-7 w-7 p-0"
-                                            onClick={() => handleChangeEmiDate(loan, emi)}
-                                          >
-                                            <Edit className="h-3 w-3" />
-                                          </Button>
-                                        </div>
-                                      )}
-                                    </div>
+                              <div className="space-y-3">
+                                {/* Toggle Settings for Loan */}
+                                <div className="p-3 bg-gradient-to-r from-gray-50 to-slate-50 rounded-lg border border-gray-200">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <Settings className="h-4 w-4 text-gray-500" />
+                                    <span className="text-sm font-medium text-gray-700">EMI Payment Options</span>
                                   </div>
-                                ))}
+                                  <div className="flex flex-wrap gap-4">
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                      <Switch
+                                        checked={emiSettings[loan.id]?.allowPartialPayment ?? true}
+                                        onCheckedChange={(checked) => updateEmiSetting(loan.id, 'allowPartialPayment', checked)}
+                                      />
+                                      <span className="text-xs text-gray-600">Allow Partial</span>
+                                    </label>
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                      <Switch
+                                        checked={emiSettings[loan.id]?.allowInterestOnly ?? true}
+                                        onCheckedChange={(checked) => updateEmiSetting(loan.id, 'allowInterestOnly', checked)}
+                                      />
+                                      <span className="text-xs text-gray-600">Allow Interest Only</span>
+                                    </label>
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                      <Switch
+                                        checked={emiSettings[loan.id]?.autoAdjustDates ?? true}
+                                        onCheckedChange={(checked) => updateEmiSetting(loan.id, 'autoAdjustDates', checked)}
+                                      />
+                                      <span className="text-xs text-gray-600">Auto-Adjust Dates</span>
+                                    </label>
+                                  </div>
+                                </div>
+                                
+                                {/* EMI List */}
+                                <div className="grid gap-2">
+                                  {loan.emiSchedules.slice(0, 6).map((emi: any, idx: number) => (
+                                    <div 
+                                      key={emi.id || idx}
+                                      className={`flex items-center justify-between p-3 rounded-lg ${
+                                        emi.paymentStatus === 'PAID' ? 'bg-green-50 border border-green-100' :
+                                        emi.paymentStatus === 'OVERDUE' ? 'bg-red-50 border border-red-100' :
+                                        emi.paymentStatus === 'PARTIALLY_PAID' ? 'bg-orange-50 border border-orange-100' :
+                                        'bg-gray-50 border border-gray-100'
+                                      }`}
+                                    >
+                                      <div className="flex items-center gap-3">
+                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium ${
+                                          emi.paymentStatus === 'PAID' ? 'bg-green-200 text-green-700' :
+                                          emi.paymentStatus === 'OVERDUE' ? 'bg-red-200 text-red-700' :
+                                          emi.paymentStatus === 'PARTIALLY_PAID' ? 'bg-orange-200 text-orange-700' :
+                                          'bg-gray-200 text-gray-700'
+                                        }`}>
+                                          #{emi.installmentNumber}
+                                        </div>
+                                        <div>
+                                          <p className="text-sm font-medium">{formatDate(emi.dueDate)}</p>
+                                          <div className="flex items-center gap-2 flex-wrap">
+                                            <p className="text-xs text-gray-500">
+                                              {emi.paymentStatus === 'PAID' ? 'Paid' : 
+                                               emi.paymentStatus === 'OVERDUE' ? 'Overdue' :
+                                               emi.paymentStatus === 'PARTIALLY_PAID' ? 'Partial' : 'Pending'}
+                                            </p>
+                                            {emi.paymentStatus === 'PARTIALLY_PAID' && emi.paidAmount && (
+                                              <span className="text-xs text-orange-600">
+                                                Remaining: {formatCurrency(emi.totalAmount - emi.paidAmount)}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center gap-3">
+                                        <div className="text-right">
+                                          <p className="font-medium">{formatCurrency(emi.totalAmount)}</p>
+                                          {emi.paidAmount && emi.paidAmount > 0 && emi.paymentStatus !== 'PAID' && (
+                                            <p className="text-xs text-emerald-600">Paid: {formatCurrency(emi.paidAmount)}</p>
+                                          )}
+                                        </div>
+                                        {canManageEmi && emi.paymentStatus !== 'PAID' && (
+                                          <div className="flex gap-1">
+                                            <Button 
+                                              size="sm" 
+                                              variant="ghost"
+                                              className="h-7 w-7 p-0"
+                                              onClick={() => handlePayEmi(loan, emi)}
+                                              title="Pay EMI"
+                                            >
+                                              <IndianRupee className="h-3 w-3" />
+                                            </Button>
+                                            <Button 
+                                              size="sm" 
+                                              variant="ghost"
+                                              className="h-7 w-7 p-0"
+                                              onClick={() => handleChangeEmiDate(loan, emi)}
+                                              title="Change Date"
+                                            >
+                                              <Edit className="h-3 w-3" />
+                                            </Button>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
                               </div>
                             ) : (
                               <p className="text-sm text-gray-500">No EMI schedules available</p>

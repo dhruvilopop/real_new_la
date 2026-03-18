@@ -55,6 +55,48 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'EMI not found' }, { status: 404 });
     }
 
+    // Sequential Payment Validation - Check if previous EMIs are paid
+    const previousEmis = await db.eMISchedule.findMany({
+      where: {
+        loanApplicationId: loanId,
+        installmentNumber: { lt: emi.installmentNumber },
+        paymentStatus: { not: 'PAID' }
+      }
+    });
+
+    if (previousEmis.length > 0) {
+      const unpaidEmiNumbers = previousEmis.map(e => e.installmentNumber).sort((a, b) => a - b);
+      return NextResponse.json({ 
+        error: 'Sequential payment required',
+        message: `Please pay EMI #${unpaidEmiNumbers[0]} first before paying this EMI`,
+        unpaidEmis: unpaidEmiNumbers
+      }, { status: 400 });
+    }
+
+    // Check if partial payment is allowed for this EMI
+    if (paymentType === 'PARTIAL_PAYMENT' && emi.allowPartialPayment === false) {
+      return NextResponse.json({ 
+        error: 'Partial payment not allowed',
+        message: 'Partial payment is disabled for this EMI. Please pay full amount.'
+      }, { status: 400 });
+    }
+
+    // Check if interest only payment is allowed for this EMI
+    if (paymentType === 'INTEREST_ONLY' && emi.allowInterestOnly === false) {
+      return NextResponse.json({ 
+        error: 'Interest only payment not allowed',
+        message: 'Interest only payment is disabled for this EMI. Please pay full amount.'
+      }, { status: 400 });
+    }
+
+    // Check if EMI already has partial payment - disable interest only option
+    if (paymentType === 'INTEREST_ONLY' && emi.isPartialPayment) {
+      return NextResponse.json({ 
+        error: 'Interest only not available after partial payment',
+        message: 'This EMI has a partial payment. Interest only option is not available.'
+      }, { status: 400 });
+    }
+
     // Handle proof upload
     let proofUrl = '';
     if (proofFile && proofFile.size > 0) {
