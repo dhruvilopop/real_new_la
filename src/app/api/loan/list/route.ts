@@ -15,7 +15,19 @@ const LOAN_LIST_SELECT = {
   companyId: true,
   currentHandlerId: true,
   customer: { select: { id: true, name: true, email: true, phone: true } },
-  company: { select: { id: true, name: true, code: true } }
+  company: { select: { id: true, name: true, code: true } },
+  sessionForm: {
+    select: {
+      id: true,
+      approvedAmount: true,
+      interestRate: true,
+      tenure: true,
+      emiAmount: true,
+      totalInterest: true,
+      totalAmount: true,
+      processingFee: true
+    }
+  }
 };
 
 export async function GET(request: NextRequest) {
