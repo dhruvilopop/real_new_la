@@ -203,6 +203,36 @@ model LoanApplication {
   annualIncome          Float?
   otherIncome           Float?
   incomeSource          String?
+  // Employment-specific fields
+  businessName          String?
+  businessType          String?
+  yearsInBusiness       Int?
+  annualTurnover        Float?
+  businessAddress       String?
+  companyType           String?
+  yearsInOperation      Int?
+  annualRevenue         Float?
+  numberOfEmployees     Int?
+  professionType        String?
+  practiceName          String?
+  yearsOfPractice       Int?
+  professionalRegNo     String?
+  previousEmployer      String?
+  retirementDate        DateTime?
+  pensionAmount         Float?
+  spouseName            String?
+  spouseOccupation      String?
+  spouseIncome          Float?
+  familyIncome          Float?
+  institutionName       String?
+  courseProgram         String?
+  expectedCompletion    DateTime?
+  guardianName          String?
+  guardianIncome        Float?
+  sourceOfFunds         String?
+  monthlySupportAmount  Float?
+  supportProviderName   String?
+  // Bank details
   bankAccountNumber     String?
   bankIfsc              String?
   bankName              String?
