@@ -73,22 +73,6 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Check if partial payment is allowed for this EMI
-    if (paymentType === 'PARTIAL_PAYMENT' && emi.allowPartialPayment === false) {
-      return NextResponse.json({ 
-        error: 'Partial payment not allowed',
-        message: 'Partial payment is disabled for this EMI. Please pay full amount.'
-      }, { status: 400 });
-    }
-
-    // Check if interest only payment is allowed for this EMI
-    if (paymentType === 'INTEREST_ONLY' && emi.allowInterestOnly === false) {
-      return NextResponse.json({ 
-        error: 'Interest only payment not allowed',
-        message: 'Interest only payment is disabled for this EMI. Please pay full amount.'
-      }, { status: 400 });
-    }
-
     // Check if EMI already has partial payment - disable interest only option
     if (paymentType === 'INTEREST_ONLY' && emi.isPartialPayment) {
       return NextResponse.json({ 
