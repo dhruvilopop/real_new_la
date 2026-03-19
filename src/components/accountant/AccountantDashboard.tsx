@@ -218,6 +218,14 @@ export default function AccountantDashboard() {
   const [showDeleteConfirmDialog, setShowDeleteConfirmDialog] = useState(false);
   const [showBankDetailDialog, setShowBankDetailDialog] = useState(false);
   const [showExpenseDetailDialog, setShowExpenseDetailDialog] = useState(false);
+  const [showSecondaryPageDialog, setShowSecondaryPageDialog] = useState(false);
+  
+  // Secondary Payment Pages
+  const [secondaryPaymentPages, setSecondaryPaymentPages] = useState<any[]>([]);
+  const [newSecondaryPage, setNewSecondaryPage] = useState({
+    name: '', description: '', upiId: '', qrCodeUrl: '',
+    bankName: '', accountNumber: '', accountName: '', ifscCode: ''
+  });
   
   // Selected items for dialogs
   const [selectedEntry, setSelectedEntry] = useState<JournalEntry | null>(null);
@@ -335,6 +343,9 @@ export default function AccountantDashboard() {
 
       // Fetch money logs for ecosystem-wide transactions
       fetchMoneyLogs();
+      
+      // Fetch secondary payment pages
+      fetchSecondaryPaymentPages();
 
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
@@ -535,6 +546,71 @@ export default function AccountantDashboard() {
     a.click();
     window.URL.revokeObjectURL(url);
     toast.success('Report exported successfully');
+  };
+
+  // Fetch Secondary Payment Pages
+  const fetchSecondaryPaymentPages = async () => {
+    try {
+      const companyFilter = selectedCompanyIds.length > 0 
+        ? selectedCompanyIds.join(',') 
+        : (user?.companyId || 'default');
+      const res = await fetch(`/api/emi-payment-settings?action=secondary-pages&companyId=${companyFilter}`);
+      const data = await res.json();
+      if (data.success && data.pages) {
+        setSecondaryPaymentPages(data.pages);
+      }
+    } catch (error) {
+      console.error('Failed to fetch secondary payment pages:', error);
+    }
+  };
+
+  // Save Secondary Payment Page
+  const handleSaveSecondaryPage = async () => {
+    if (!newSecondaryPage.name) {
+      toast.error('Please enter a name for the payment page');
+      return;
+    }
+    try {
+      const res = await fetch('/api/emi-payment-settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          companyId: user?.companyId || 'default',
+          ...newSecondaryPage,
+          createdById: user?.id
+        })
+      });
+      if (res.ok) {
+        toast.success('Secondary payment page created successfully');
+        setShowSecondaryPageDialog(false);
+        setNewSecondaryPage({
+          name: '', description: '', upiId: '', qrCodeUrl: '',
+          bankName: '', accountNumber: '', accountName: '', ifscCode: ''
+        });
+        fetchSecondaryPaymentPages();
+      } else {
+        toast.error((await res.json()).error || 'Failed to create payment page');
+      }
+    } catch (error) {
+      toast.error('Failed to create secondary payment page');
+    }
+  };
+
+  // Delete Secondary Payment Page
+  const handleDeleteSecondaryPage = async (pageId: string) => {
+    try {
+      const res = await fetch(`/api/emi-payment-settings?pageId=${pageId}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        toast.success('Payment page deleted successfully');
+        fetchSecondaryPaymentPages();
+      } else {
+        toast.error('Failed to delete payment page');
+      }
+    } catch (error) {
+      toast.error('Failed to delete payment page');
+    }
   };
 
   const resetJournalForm = () => {
@@ -1844,6 +1920,77 @@ export default function AccountantDashboard() {
         )}
       </div>
 
+      {/* Secondary Payment Pages Section */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <CreditCard className="h-5 w-5" /> Secondary Payment Pages
+              </CardTitle>
+              <CardDescription>
+                Additional payment pages for display. Money is tracked in the default company bank account.
+              </CardDescription>
+            </div>
+            <Button onClick={() => setShowSecondaryPageDialog(true)}>
+              <Plus className="h-4 w-4 mr-2" /> Add Payment Page
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {secondaryPaymentPages.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <CreditCard className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>No secondary payment pages yet</p>
+              <p className="text-sm mt-2">Create additional payment pages to show different UPI/QR/Bank details to customers</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {secondaryPaymentPages.map((page) => (
+                <Card key={page.id} className="hover:shadow-md transition-all">
+                  <CardContent className="p-4">
+                    <div className="flex justify-between items-start mb-3">
+                      <div>
+                        <h4 className="font-semibold">{page.name}</h4>
+                        <p className="text-sm text-muted-foreground">{page.description || 'No description'}</p>
+                      </div>
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-500 hover:text-red-700" onClick={() => handleDeleteSecondaryPage(page.id)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <div className="space-y-2 text-sm">
+                      {page.upiId && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">UPI ID:</span>
+                          <span className="font-mono">{page.upiId}</span>
+                        </div>
+                      )}
+                      {page.bankName && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Bank:</span>
+                          <span>{page.bankName}</span>
+                        </div>
+                      )}
+                      {page.accountNumber && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Account:</span>
+                          <span className="font-mono">{page.accountNumber}</span>
+                        </div>
+                      )}
+                      {page.qrCodeUrl && (
+                        <div className="mt-3">
+                          <img src={page.qrCodeUrl} alt="QR Code" className="w-24 h-24 rounded-lg border" />
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Recent Bank Transactions */}
       <Card>
         <CardHeader>
@@ -2473,6 +2620,75 @@ export default function AccountantDashboard() {
           <DialogFooter>
             <Button variant="outline" onClick={() => { setShowBankDialog(false); resetBankForm(); }}>Cancel</Button>
             <Button onClick={handleSaveBankAccount}>Add Bank Account</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Secondary Payment Page Dialog */}
+      <Dialog open={showSecondaryPageDialog} onOpenChange={setShowSecondaryPageDialog}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CreditCard className="h-5 w-5" /> Add Secondary Payment Page
+            </DialogTitle>
+            <DialogDescription>
+              Create an additional payment page with different UPI/QR/Bank details. Money will still be tracked in the default company bank account.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="col-span-2">
+                <Label>Page Name *</Label>
+                <Input placeholder="e.g., Partner Collection Point 1" value={newSecondaryPage.name} onChange={(e) => setNewSecondaryPage({ ...newSecondaryPage, name: e.target.value })} />
+              </div>
+              <div className="col-span-2">
+                <Label>Description</Label>
+                <Input placeholder="Brief description of this payment page" value={newSecondaryPage.description} onChange={(e) => setNewSecondaryPage({ ...newSecondaryPage, description: e.target.value })} />
+              </div>
+            </div>
+            
+            <div className="border-t pt-4">
+              <h4 className="font-medium mb-3">Payment Display Details</h4>
+              <p className="text-xs text-muted-foreground mb-3">These details will be shown to customers when they select this payment page</p>
+              
+              <div className="space-y-3">
+                <div>
+                  <Label>UPI ID</Label>
+                  <Input placeholder="e.g., partner@upi" value={newSecondaryPage.upiId} onChange={(e) => setNewSecondaryPage({ ...newSecondaryPage, upiId: e.target.value })} />
+                </div>
+                <div>
+                  <Label>QR Code URL</Label>
+                  <Input placeholder="https://... (image URL)" value={newSecondaryPage.qrCodeUrl} onChange={(e) => setNewSecondaryPage({ ...newSecondaryPage, qrCodeUrl: e.target.value })} />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Bank Name</Label>
+                    <Input placeholder="e.g., HDFC Bank" value={newSecondaryPage.bankName} onChange={(e) => setNewSecondaryPage({ ...newSecondaryPage, bankName: e.target.value })} />
+                  </div>
+                  <div>
+                    <Label>Account Number</Label>
+                    <Input placeholder="1234567890" value={newSecondaryPage.accountNumber} onChange={(e) => setNewSecondaryPage({ ...newSecondaryPage, accountNumber: e.target.value })} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Account Holder Name</Label>
+                    <Input placeholder="Name on account" value={newSecondaryPage.accountName} onChange={(e) => setNewSecondaryPage({ ...newSecondaryPage, accountName: e.target.value })} />
+                  </div>
+                  <div>
+                    <Label>IFSC Code</Label>
+                    <Input placeholder="HDFC0001234" value={newSecondaryPage.ifscCode} onChange={(e) => setNewSecondaryPage({ ...newSecondaryPage, ifscCode: e.target.value })} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { 
+              setShowSecondaryPageDialog(false); 
+              setNewSecondaryPage({ name: '', description: '', upiId: '', qrCodeUrl: '', bankName: '', accountNumber: '', accountName: '', ifscCode: '' }); 
+            }}>Cancel</Button>
+            <Button onClick={handleSaveSecondaryPage}>Create Payment Page</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
