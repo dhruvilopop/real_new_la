@@ -76,14 +76,13 @@ export default function SuperAdminDashboard() {
   const [showProductDialog, setShowProductDialog] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [productForm, setProductForm] = useState({
-    title: '', description: '', icon: '💰', loanType: 'PERSONAL',
-    minInterestRate: 8, maxInterestRate: 24, defaultInterestRate: 12,
-    minTenure: 6, maxTenure: 60, defaultTenure: 12,
+    title: '', description: '', icon: '💰',
+    minInterestRate: 8, maxInterestRate: 24,
+    minTenure: 6, maxTenure: 60,
     minAmount: 10000, maxAmount: 10000000,
-    processingFeePercent: 1, processingFeeMin: 500, processingFeeMax: 10000,
-    latePaymentPenaltyPercent: 2, gracePeriodDays: 5, bounceCharges: 500,
-    allowMoratorium: true, maxMoratoriumMonths: 3,
-    allowPrepayment: true, prepaymentCharges: 2, isActive: true
+    processingFeePercent: 1,
+    latePaymentPenalty: 500,
+    allowPrepayment: true, isActive: true
   });
   // Interest-only loan states
   const [interestOnlyLoans, setInterestOnlyLoans] = useState<any[]>([]);
@@ -449,14 +448,13 @@ export default function SuperAdminDashboard() {
         setShowProductDialog(false);
         setSelectedProduct(null);
         setProductForm({
-          title: '', description: '', icon: '💰', loanType: 'PERSONAL',
-          minInterestRate: 8, maxInterestRate: 24, defaultInterestRate: 12,
-          minTenure: 6, maxTenure: 60, defaultTenure: 12,
+          title: '', description: '', icon: '💰',
+          minInterestRate: 8, maxInterestRate: 24,
+          minTenure: 6, maxTenure: 60,
           minAmount: 10000, maxAmount: 10000000,
-          processingFeePercent: 1, processingFeeMin: 500, processingFeeMax: 10000,
-          latePaymentPenaltyPercent: 2, gracePeriodDays: 5, bounceCharges: 500,
-          allowMoratorium: true, maxMoratoriumMonths: 3,
-          allowPrepayment: true, prepaymentCharges: 2, isActive: true
+          processingFeePercent: 1,
+          latePaymentPenalty: 500,
+          allowPrepayment: true, isActive: true
         });
         fetchProducts();
       } else {
@@ -489,25 +487,15 @@ export default function SuperAdminDashboard() {
       title: product.title,
       description: product.description,
       icon: product.icon || '💰',
-      loanType: product.loanType || 'PERSONAL',
       minInterestRate: product.minInterestRate,
       maxInterestRate: product.maxInterestRate,
-      defaultInterestRate: product.defaultInterestRate,
       minTenure: product.minTenure,
       maxTenure: product.maxTenure,
-      defaultTenure: product.defaultTenure,
       minAmount: product.minAmount,
       maxAmount: product.maxAmount,
       processingFeePercent: product.processingFeePercent,
-      processingFeeMin: product.processingFeeMin,
-      processingFeeMax: product.processingFeeMax,
-      latePaymentPenaltyPercent: product.latePaymentPenaltyPercent,
-      gracePeriodDays: product.gracePeriodDays,
-      bounceCharges: product.bounceCharges,
-      allowMoratorium: product.allowMoratorium,
-      maxMoratoriumMonths: product.maxMoratoriumMonths,
+      latePaymentPenalty: product.latePaymentPenalty || 500,
       allowPrepayment: product.allowPrepayment,
-      prepaymentCharges: product.prepaymentCharges,
       isActive: product.isActive
     });
     setShowProductDialog(true);
@@ -4120,7 +4108,7 @@ export default function SuperAdminDashboard() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Product Name *</Label>
-                  <Input placeholder="e.g., Personal Loan" value={productForm.title} onChange={(e) => setProductForm({...productForm, title: e.target.value})} />
+                  <Input placeholder="e.g., Personal Loan, Business Loan" value={productForm.title} onChange={(e) => setProductForm({...productForm, title: e.target.value})} />
                 </div>
                 <div className="space-y-2">
                   <Label>Icon (Emoji)</Label>
@@ -4131,38 +4119,22 @@ export default function SuperAdminDashboard() {
                 <Label>Description *</Label>
                 <Input placeholder="Short description of the loan product" value={productForm.description} onChange={(e) => setProductForm({...productForm, description: e.target.value})} />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Loan Type</Label>
-                  <Select value={productForm.loanType} onValueChange={(v) => setProductForm({...productForm, loanType: v})}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="PERSONAL">Personal Loan</SelectItem>
-                      <SelectItem value="BUSINESS">Business Loan</SelectItem>
-                      <SelectItem value="HOME">Home Loan</SelectItem>
-                      <SelectItem value="EDUCATION">Education Loan</SelectItem>
-                      <SelectItem value="VEHICLE">Vehicle Loan</SelectItem>
-                      <SelectItem value="GOLD">Gold Loan</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Status</Label>
-                  <Select value={productForm.isActive ? 'active' : 'inactive'} onValueChange={(v) => setProductForm({...productForm, isActive: v === 'active'})}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="active">Active</SelectItem>
-                      <SelectItem value="inactive">Inactive</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className="space-y-2">
+                <Label>Status</Label>
+                <Select value={productForm.isActive ? 'active' : 'inactive'} onValueChange={(v) => setProductForm({...productForm, isActive: v === 'active'})}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="inactive">Inactive</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
             {/* Interest & Tenure */}
             <div className="space-y-4">
               <h4 className="font-semibold text-sm text-gray-700 uppercase tracking-wide">Interest Rate & Tenure</h4>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Min Interest (%)</Label>
                   <Input type="number" step="0.1" value={productForm.minInterestRate} onChange={(e) => setProductForm({...productForm, minInterestRate: parseFloat(e.target.value)})} />
@@ -4171,12 +4143,8 @@ export default function SuperAdminDashboard() {
                   <Label>Max Interest (%)</Label>
                   <Input type="number" step="0.1" value={productForm.maxInterestRate} onChange={(e) => setProductForm({...productForm, maxInterestRate: parseFloat(e.target.value)})} />
                 </div>
-                <div className="space-y-2">
-                  <Label>Default (%)</Label>
-                  <Input type="number" step="0.1" value={productForm.defaultInterestRate} onChange={(e) => setProductForm({...productForm, defaultInterestRate: parseFloat(e.target.value)})} />
-                </div>
               </div>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Min Tenure (months)</Label>
                   <Input type="number" value={productForm.minTenure} onChange={(e) => setProductForm({...productForm, minTenure: parseInt(e.target.value)})} />
@@ -4184,10 +4152,6 @@ export default function SuperAdminDashboard() {
                 <div className="space-y-2">
                   <Label>Max Tenure (months)</Label>
                   <Input type="number" value={productForm.maxTenure} onChange={(e) => setProductForm({...productForm, maxTenure: parseInt(e.target.value)})} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Default (months)</Label>
-                  <Input type="number" value={productForm.defaultTenure} onChange={(e) => setProductForm({...productForm, defaultTenure: parseInt(e.target.value)})} />
                 </div>
               </div>
             </div>
@@ -4210,32 +4174,18 @@ export default function SuperAdminDashboard() {
             {/* Fees & Charges */}
             <div className="space-y-4">
               <h4 className="font-semibold text-sm text-gray-700 uppercase tracking-wide">Fees & Charges</h4>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Processing Fee (%)</Label>
+                  <Label>Processing Fee (%) *</Label>
                   <Input type="number" step="0.1" value={productForm.processingFeePercent} onChange={(e) => setProductForm({...productForm, processingFeePercent: parseFloat(e.target.value)})} />
+                  <p className="text-xs text-gray-500">
+                    For a loan of ₹1,00,000: Fee = ₹{((productForm.processingFeePercent || 0) * 1000).toLocaleString()}
+                  </p>
                 </div>
                 <div className="space-y-2">
-                  <Label>Min Fee (₹)</Label>
-                  <Input type="number" value={productForm.processingFeeMin} onChange={(e) => setProductForm({...productForm, processingFeeMin: parseFloat(e.target.value)})} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Max Fee (₹)</Label>
-                  <Input type="number" value={productForm.processingFeeMax} onChange={(e) => setProductForm({...productForm, processingFeeMax: parseFloat(e.target.value)})} />
-                </div>
-              </div>
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label>Late Payment Penalty (%)</Label>
-                  <Input type="number" step="0.1" value={productForm.latePaymentPenaltyPercent} onChange={(e) => setProductForm({...productForm, latePaymentPenaltyPercent: parseFloat(e.target.value)})} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Grace Period (days)</Label>
-                  <Input type="number" value={productForm.gracePeriodDays} onChange={(e) => setProductForm({...productForm, gracePeriodDays: parseInt(e.target.value)})} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Bounce Charges (₹)</Label>
-                  <Input type="number" value={productForm.bounceCharges} onChange={(e) => setProductForm({...productForm, bounceCharges: parseFloat(e.target.value)})} />
+                  <Label>Late Payment Penalty (₹)</Label>
+                  <Input type="number" value={productForm.latePaymentPenalty} onChange={(e) => setProductForm({...productForm, latePaymentPenalty: parseFloat(e.target.value)})} />
+                  <p className="text-xs text-gray-500">Fixed amount charged per late EMI</p>
                 </div>
               </div>
             </div>
@@ -4243,31 +4193,12 @@ export default function SuperAdminDashboard() {
             {/* Additional Options */}
             <div className="space-y-4">
               <h4 className="font-semibold text-sm text-gray-700 uppercase tracking-wide">Additional Options</h4>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <div>
-                    <Label>Allow Moratorium</Label>
-                    <p className="text-xs text-gray-500">Allow repayment holiday period</p>
-                  </div>
-                  <input type="checkbox" checked={productForm.allowMoratorium} onChange={(e) => setProductForm({...productForm, allowMoratorium: e.target.checked})} className="h-4 w-4" />
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div>
+                  <Label>Allow Prepayment</Label>
+                  <p className="text-xs text-gray-500">Allow early loan closure without extra charges</p>
                 </div>
-                <div className="space-y-2">
-                  <Label>Max Moratorium (months)</Label>
-                  <Input type="number" value={productForm.maxMoratoriumMonths} onChange={(e) => setProductForm({...productForm, maxMoratoriumMonths: parseInt(e.target.value)})} disabled={!productForm.allowMoratorium} />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <div>
-                    <Label>Allow Prepayment</Label>
-                    <p className="text-xs text-gray-500">Allow early loan closure</p>
-                  </div>
-                  <input type="checkbox" checked={productForm.allowPrepayment} onChange={(e) => setProductForm({...productForm, allowPrepayment: e.target.checked})} className="h-4 w-4" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Prepayment Charges (%)</Label>
-                  <Input type="number" step="0.1" value={productForm.prepaymentCharges} onChange={(e) => setProductForm({...productForm, prepaymentCharges: parseFloat(e.target.value)})} disabled={!productForm.allowPrepayment} />
-                </div>
+                <input type="checkbox" checked={productForm.allowPrepayment} onChange={(e) => setProductForm({...productForm, allowPrepayment: e.target.checked})} className="h-4 w-4" />
               </div>
             </div>
           </div>

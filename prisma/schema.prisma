@@ -688,6 +688,7 @@ model CMSService {
   processingFeeMin    Float    @default(500)
   processingFeeMax    Float    @default(10000)
   latePaymentPenaltyPercent Float @default(2)
+  latePaymentPenalty  Float    @default(500) // Fixed amount in rupees per late EMI
   gracePeriodDays     Int      @default(5)
   bounceCharges       Float    @default(500)
   allowMoratorium     Boolean  @default(true)

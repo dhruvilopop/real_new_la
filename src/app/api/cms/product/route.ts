@@ -65,14 +65,13 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const {
-      title, description, icon, loanType,
-      minInterestRate, maxInterestRate, defaultInterestRate,
-      minTenure, maxTenure, defaultTenure,
+      title, description, icon,
+      minInterestRate, maxInterestRate,
+      minTenure, maxTenure,
       minAmount, maxAmount,
-      processingFeePercent, processingFeeMin, processingFeeMax,
-      latePaymentPenaltyPercent, gracePeriodDays, bounceCharges,
-      allowMoratorium, maxMoratoriumMonths,
-      allowPrepayment, prepaymentCharges,
+      processingFeePercent,
+      latePaymentPenalty,
+      allowPrepayment,
       isActive, order
     } = body;
 
@@ -89,25 +88,26 @@ export async function POST(request: NextRequest) {
         title,
         description,
         icon: icon || '📝',
-        loanType: loanType || 'PERSONAL',
+        loanType: 'PERSONAL', // Default, not used in UI anymore
         minInterestRate: parseFloat(minInterestRate) || 8,
         maxInterestRate: parseFloat(maxInterestRate) || 24,
-        defaultInterestRate: parseFloat(defaultInterestRate) || 12,
+        defaultInterestRate: parseFloat(minInterestRate) || 8, // Use min as default
         minTenure: parseInt(minTenure) || 6,
         maxTenure: parseInt(maxTenure) || 60,
-        defaultTenure: parseInt(defaultTenure) || 12,
+        defaultTenure: parseInt(minTenure) || 6, // Use min as default
         minAmount: parseFloat(minAmount) || 10000,
         maxAmount: parseFloat(maxAmount) || 10000000,
         processingFeePercent: parseFloat(processingFeePercent) || 1,
-        processingFeeMin: parseFloat(processingFeeMin) || 500,
-        processingFeeMax: parseFloat(processingFeeMax) || 10000,
-        latePaymentPenaltyPercent: parseFloat(latePaymentPenaltyPercent) || 2,
-        gracePeriodDays: parseInt(gracePeriodDays) || 5,
-        bounceCharges: parseFloat(bounceCharges) || 500,
-        allowMoratorium: allowMoratorium !== false,
-        maxMoratoriumMonths: parseInt(maxMoratoriumMonths) || 3,
+        processingFeeMin: 0, // Not used in simplified UI
+        processingFeeMax: 0, // Not used in simplified UI
+        latePaymentPenaltyPercent: 0, // Not used in simplified UI
+        latePaymentPenalty: parseFloat(latePaymentPenalty) || 500,
+        gracePeriodDays: 0, // Not used in simplified UI
+        bounceCharges: 0, // Not used in simplified UI
+        allowMoratorium: false, // Not used in simplified UI
+        maxMoratoriumMonths: 0, // Not used in simplified UI
         allowPrepayment: allowPrepayment !== false,
-        prepaymentCharges: parseFloat(prepaymentCharges) || 2,
+        prepaymentCharges: 0, // No charges for prepayment
         isActive: isActive !== false,
         order: parseInt(order) || (maxOrder._max.order || 0) + 1
       }
@@ -139,7 +139,7 @@ export async function PUT(request: NextRequest) {
       'minTenure', 'maxTenure', 'defaultTenure',
       'minAmount', 'maxAmount',
       'processingFeePercent', 'processingFeeMin', 'processingFeeMax',
-      'latePaymentPenaltyPercent', 'gracePeriodDays', 'bounceCharges',
+      'latePaymentPenaltyPercent', 'latePaymentPenalty', 'gracePeriodDays', 'bounceCharges',
       'maxMoratoriumMonths', 'prepaymentCharges', 'order'
     ];
 
