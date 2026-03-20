@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { cache } from '@/lib/cache';
+import { cache, CacheTTL, CacheKeys } from '@/lib/cache';
 
-// Lightweight select for list view
+// Lightweight select for list view - minimal fields for list display
 const LOAN_LIST_SELECT = {
   id: true,
   applicationNo: true,
@@ -22,13 +22,13 @@ const LOAN_LIST_SELECT = {
       approvedAmount: true,
       interestRate: true,
       tenure: true,
-      emiAmount: true,
-      totalInterest: true,
-      totalAmount: true,
-      processingFee: true
+      emiAmount: true
     }
   }
-};
+} as const;
+
+// Cache TTL for loan list - 60 seconds (loans change frequently during processing)
+const LOAN_LIST_CACHE_TTL = CacheTTL.MEDIUM;
 
 export async function GET(request: NextRequest) {
   try {
@@ -40,22 +40,36 @@ export async function GET(request: NextRequest) {
     const staffId = searchParams.get('staffId');
     const status = searchParams.get('status');
 
+    // Generate cache key based on all query parameters
+    const cacheKey = `${CacheKeys.loansByRole(role || 'all')}-${customerId || ''}-${companyId || ''}-${agentId || ''}-${staffId || ''}-${status || ''}`;
+    
+    // Check cache first
+    const cached = cache.get(cacheKey);
+    if (cached) {
+      return NextResponse.json({ loans: cached });
+    }
+
     const where: Record<string, unknown> = {};
     
     if (customerId) where.customerId = customerId;
     if (companyId) where.companyId = companyId;
     if (status) where.status = status;
 
-    // Role-based filtering
-    if (role === 'SUPER_ADMIN') {
-      // Super admin sees all loans
-    } else if (role === 'COMPANY') {
-      if (companyId) where.companyId = companyId;
-    } else if (role === 'AGENT' && agentId) {
-      const agent = await db.user.findUnique({
+    // Role-based filtering with parallel agent lookup when needed
+    let agentCompanyQuery = null;
+    if (role === 'AGENT' && agentId) {
+      agentCompanyQuery = db.user.findUnique({
         where: { id: agentId },
         select: { companyId: true }
       });
+    }
+
+    if (role === 'SUPER_ADMIN') {
+      // Super admin sees all loans - no additional filter
+    } else if (role === 'COMPANY') {
+      if (companyId) where.companyId = companyId;
+    } else if (role === 'AGENT' && agentId) {
+      const agent = await agentCompanyQuery;
       
       where.OR = [
         { currentHandlerId: agentId },
@@ -81,6 +95,9 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'desc' },
       select: LOAN_LIST_SELECT
     });
+
+    // Cache the result
+    cache.set(cacheKey, loans, LOAN_LIST_CACHE_TTL);
 
     return NextResponse.json({ loans });
   } catch (error) {

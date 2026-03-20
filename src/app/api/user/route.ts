@@ -3,10 +3,10 @@ import { db } from '@/lib/db';
 import { UserRole } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { generateCode } from '@/utils/helpers';
-import { cache } from '@/lib/cache';
+import { cache, CacheTTL, CacheKeys, invalidateUserCache } from '@/lib/cache';
 
-const USERS_CACHE_KEY = 'users-list';
-const CACHE_TTL = 60 * 1000; // 1 minute
+// Cache TTL for users list - 5 minutes (users don't change frequently)
+const CACHE_TTL = CacheTTL.LONG;
 
 export async function GET(request: NextRequest) {
   try {
@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     const role = searchParams.get('role');
 
     // Check cache first
-    const cacheKey = `${USERS_CACHE_KEY}-${role || 'all'}`;
+    const cacheKey = `${CacheKeys.usersList()}-${role || 'all'}`;
     const cached = cache.get(cacheKey);
     if (cached) {
       return NextResponse.json({ users: cached });
@@ -23,6 +23,7 @@ export async function GET(request: NextRequest) {
     const where: Record<string, unknown> = {};
     if (role) where.role = role;
 
+    // Select only fields needed for list display
     const users = await db.user.findMany({
       where,
       orderBy: { createdAt: 'desc' },

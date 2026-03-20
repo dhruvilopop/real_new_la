@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { CreditTransactionType, PaymentModeType, CreditType } from '@prisma/client';
 import { createEMIPaymentEntry } from '@/lib/accounting-service';
+import { cache, CacheTTL, CacheKeys } from '@/lib/cache';
 
 // ============================================
 // DUAL CREDIT SYSTEM API
@@ -9,9 +10,8 @@ import { createEMIPaymentEntry } from '@/lib/accounting-service';
 // Personal Credit: Requires proof for ALL transactions
 // ============================================
 
-// Simple in-memory cache for credit summary (to prevent DB connection limit issues)
-const creditCache: Map<string, { data: any; timestamp: number }> = new Map();
-const CACHE_TTL = 60000; // 1 minute cache (increased from 30s)
+// Cache TTL for credit summary - 2 minutes (credit changes with payments)
+const CACHE_TTL = CacheTTL.MEDIUM * 2;
 
 // GET - Fetch credit balance and history for a user
 export async function GET(request: NextRequest) {
@@ -23,10 +23,22 @@ export async function GET(request: NextRequest) {
 
     // Get all credit transactions (for Super Admin)
     if (action === 'all-transactions') {
+      const cacheKey = `credit:all-transactions`;
+      const cached = cache.get(cacheKey);
+      if (cached) {
+        return NextResponse.json({ success: true, transactions: cached });
+      }
+
       const transactions = await db.creditTransaction.findMany({
         orderBy: { createdAt: 'desc' },
         take: 100,
-        include: {
+        select: {
+          id: true,
+          transactionType: true,
+          amount: true,
+          paymentMode: true,
+          creditType: true,
+          createdAt: true,
           user: {
             select: {
               id: true,
@@ -42,14 +54,18 @@ export async function GET(request: NextRequest) {
         }
       });
 
-      return NextResponse.json({
-        success: true,
-        transactions
-      });
+      cache.set(cacheKey, transactions, CacheTTL.SHORT);
+      return NextResponse.json({ success: true, transactions });
     }
 
     // Get all users with any credit (for Super Admin)
     if (action === 'all-personal-credits') {
+      const cacheKey = `credit:all-personal-credits`;
+      const cached = cache.get(cacheKey);
+      if (cached) {
+        return NextResponse.json({ success: true, ...cached });
+      }
+
       const usersWithCredit = await db.user.findMany({
         where: {
           OR: [
@@ -77,12 +93,14 @@ export async function GET(request: NextRequest) {
         orderBy: { credit: 'desc' }
       });
 
-      return NextResponse.json({
-        success: true,
+      const result = {
         users: usersWithCredit,
         totalPersonalCredit: usersWithCredit.reduce((sum, u) => sum + u.personalCredit, 0),
         totalCompanyCredit: usersWithCredit.reduce((sum, u) => sum + u.companyCredit, 0)
-      });
+      };
+      
+      cache.set(cacheKey, result, CacheTTL.MEDIUM);
+      return NextResponse.json({ success: true, ...result });
     }
 
     if (!userId) {
@@ -91,12 +109,10 @@ export async function GET(request: NextRequest) {
 
     // Check cache for summary action (most frequently called)
     if (action === 'summary') {
-      const cacheKey = `summary_${userId}_${creditType || 'all'}`;
-      const cached = creditCache.get(cacheKey);
-      const now = Date.now();
-      
-      if (cached && (now - cached.timestamp) < CACHE_TTL) {
-        return NextResponse.json(cached.data);
+      const cacheKey = `${CacheKeys.creditSummary(userId)}-${creditType || 'all'}`;
+      const cached = cache.get(cacheKey);
+      if (cached) {
+        return NextResponse.json(cached);
       }
     }
 
@@ -129,18 +145,32 @@ export async function GET(request: NextRequest) {
         whereClause.creditType = creditType;
       }
 
-      const todayTransactions = await db.creditTransaction.findMany({
-        where: {
-          ...whereClause,
-          createdAt: { gte: today }
-        }
-      });
-
-      const allTransactions = await db.creditTransaction.findMany({
-        where: whereClause,
-        orderBy: { createdAt: 'desc' },
-        take: 50
-      });
+      // Use Promise.all for parallel queries - SUPER FAST!
+      const [todayTransactions, allTransactions] = await Promise.all([
+        db.creditTransaction.findMany({
+          where: {
+            ...whereClause,
+            createdAt: { gte: today }
+          },
+          select: {
+            transactionType: true,
+            amount: true,
+            creditType: true,
+            paymentMode: true,
+            proofDocument: true
+          }
+        }),
+        db.creditTransaction.findMany({
+          where: whereClause,
+          orderBy: { createdAt: 'desc' },
+          take: 50,
+          select: {
+            paymentMode: true,
+            creditType: true,
+            proofDocument: true
+          }
+        })
+      ]);
 
       const summary = {
         // Total credits
@@ -193,14 +223,8 @@ export async function GET(request: NextRequest) {
       const responseData = { success: true, summary, user };
       
       // Cache the result
-      const cacheKey = `summary_${userId}_${creditType || 'all'}`;
-      creditCache.set(cacheKey, { data: responseData, timestamp: Date.now() });
-      
-      // Clean old cache entries (keep cache size reasonable)
-      if (creditCache.size > 100) {
-        const oldestKeys = Array.from(creditCache.keys()).slice(0, 50);
-        oldestKeys.forEach(key => creditCache.delete(key));
-      }
+      const cacheKey = `${CacheKeys.creditSummary(userId)}-${creditType || 'all'}`;
+      cache.set(cacheKey, responseData, CACHE_TTL);
 
       return NextResponse.json(responseData);
     }
@@ -260,7 +284,15 @@ export async function GET(request: NextRequest) {
         orderBy: { createdAt: 'desc' },
         skip,
         take: limit,
-        include: {
+        select: {
+          id: true,
+          transactionType: true,
+          amount: true,
+          paymentMode: true,
+          creditType: true,
+          createdAt: true,
+          proofDocument: true,
+          proofVerified: true,
           settlement: {
             select: {
               settlementNumber: true,

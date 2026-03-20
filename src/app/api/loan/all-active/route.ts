@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { cache } from '@/lib/cache';
+import { cache, CacheTTL, CacheKeys } from '@/lib/cache';
 
-// Cache key for active loans
-const ACTIVE_LOANS_CACHE_KEY = 'active-loans';
-const CACHE_TTL = 30 * 1000; // 30 seconds
+// Cache TTL for active loans - 60 seconds (active loans status changes less frequently)
+const CACHE_TTL = CacheTTL.MEDIUM;
 
 // GET all active loans (both online and offline) with complete passbook data
 export async function GET(request: NextRequest) {
@@ -14,7 +13,7 @@ export async function GET(request: NextRequest) {
     const includePassbook = searchParams.get('passbook') === 'true';
 
     // Try to get from cache first
-    const cacheKey = `${ACTIVE_LOANS_CACHE_KEY}-${filter}-${includePassbook}`;
+    const cacheKey = `${CacheKeys.allActiveLoans()}-${filter}-${includePassbook}`;
     const cached = cache.get(cacheKey);
     if (cached) {
       return NextResponse.json(cached);
@@ -22,7 +21,7 @@ export async function GET(request: NextRequest) {
 
     // Use Promise.all for parallel queries - SUPER FAST!
     const [onlineLoans, offlineLoans] = await Promise.all([
-      // Fetch online loans
+      // Fetch online loans with minimal EMI fields
       filter === 'all' || filter === 'online' 
         ? db.loanApplication.findMany({
             where: { status: { in: ['ACTIVE', 'DISBURSED'] } },
@@ -52,26 +51,18 @@ export async function GET(request: NextRequest) {
                   id: true,
                   installmentNumber: true,
                   dueDate: true,
-                  originalDueDate: true,
-                  principalAmount: true,
-                  interestAmount: true,
                   totalAmount: true,
                   paidAmount: true,
-                  paidPrincipal: true,
-                  paidInterest: true,
                   paymentStatus: true,
                   paidDate: true,
-                  paymentMode: true,
                   penaltyAmount: true,
-                  daysOverdue: true,
-                  isPartialPayment: true,
-                  isInterestOnly: true,
-                  nextPaymentDate: true
+                  daysOverdue: true
                 }
               },
               payments: includePassbook ? {
                 where: { status: 'COMPLETED' },
                 orderBy: { createdAt: 'desc' },
+                take: 10, // Limit payments for performance
                 select: {
                   id: true,
                   amount: true,
@@ -85,7 +76,7 @@ export async function GET(request: NextRequest) {
           })
         : Promise.resolve([]),
       
-      // Fetch offline loans
+      // Fetch offline loans with minimal fields
       filter === 'all' || filter === 'offline'
         ? db.offlineLoan.findMany({
             where: { status: 'ACTIVE' },
@@ -112,15 +103,10 @@ export async function GET(request: NextRequest) {
                   id: true,
                   installmentNumber: true,
                   dueDate: true,
-                  principalAmount: true,
-                  interestAmount: true,
                   totalAmount: true,
                   paidAmount: true,
-                  paidPrincipal: true,
-                  paidInterest: true,
                   paymentStatus: true,
                   paidDate: true,
-                  paymentMode: true,
                   penaltyAmount: true,
                   daysOverdue: true
                 }

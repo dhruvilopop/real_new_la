@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { cache, CacheTTL } from '@/lib/cache';
+
+// Cache TTL for notifications - 30 seconds (notifications change frequently)
+const CACHE_TTL = CacheTTL.SHORT;
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,19 +15,40 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
     }
 
+    // Check cache first
+    const cacheKey = `notifications:${userId}:${limit}`;
+    const cached = cache.get(cacheKey);
+    if (cached) {
+      return NextResponse.json({ success: true, ...cached });
+    }
+
     // Parallel queries for speed
     const [notifications, unreadCount] = await Promise.all([
       db.notification.findMany({
         where: { userId },
         orderBy: { createdAt: 'desc' },
-        take: limit
+        take: limit,
+        select: {
+          id: true,
+          type: true,
+          title: true,
+          message: true,
+          isRead: true,
+          createdAt: true,
+          data: true
+        }
       }),
       db.notification.count({
         where: { userId, isRead: false }
       })
     ]);
 
-    return NextResponse.json({ success: true, notifications, unreadCount });
+    const result = { notifications, unreadCount };
+    
+    // Cache the result
+    cache.set(cacheKey, result, CACHE_TTL);
+
+    return NextResponse.json({ success: true, ...result });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to fetch notifications' }, { status: 500 });
   }
