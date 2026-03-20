@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { cache } from '@/lib/cache';
+
+const COMPANIES_CACHE_KEY = 'companies-list';
+const CACHE_TTL = 60 * 1000; // 1 minute
 
 // GET - Fetch companies
 export async function GET(request: NextRequest) {
@@ -33,6 +37,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ company });
     }
 
+    // Check cache for list
+    const cacheKey = `${COMPANIES_CACHE_KEY}-${isActive || 'all'}`;
+    const cached = cache.get(cacheKey);
+    if (cached) {
+      return NextResponse.json({ companies: cached });
+    }
+
     // Fetch all companies
     const where: Record<string, unknown> = {};
     if (isActive === 'true') {
@@ -42,7 +53,12 @@ export async function GET(request: NextRequest) {
     const companies = await db.company.findMany({
       where,
       orderBy: { name: 'asc' },
-      include: {
+      select: {
+        id: true,
+        name: true,
+        code: true,
+        isActive: true,
+        createdAt: true,
         _count: {
           select: {
             loanApplications: true,
@@ -52,38 +68,10 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    // Get additional stats for each company
-    const companiesWithStats = await Promise.all(
-      companies.map(async (company) => {
-        // Get loan stats
-        const activeLoans = await db.loanApplication.count({
-          where: {
-            companyId: company.id,
-            status: { in: ['ACTIVE', 'DISBURSED'] }
-          }
-        });
+    // Cache the result
+    cache.set(cacheKey, companies, CACHE_TTL);
 
-        const totalDisbursed = await db.loanApplication.aggregate({
-          where: {
-            companyId: company.id,
-            status: { in: ['ACTIVE', 'DISBURSED'] }
-          },
-          _sum: {
-            disbursedAmount: true
-          }
-        });
-
-        return {
-          ...company,
-          stats: {
-            activeLoans,
-            totalDisbursed: totalDisbursed._sum.disbursedAmount || 0
-          }
-        };
-      })
-    );
-
-    return NextResponse.json({ companies: companiesWithStats });
+    return NextResponse.json({ companies });
   } catch (error) {
     console.error('Company fetch error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

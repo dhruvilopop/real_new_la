@@ -3,11 +3,22 @@ import { db } from '@/lib/db';
 import { UserRole } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { generateCode } from '@/utils/helpers';
+import { cache } from '@/lib/cache';
+
+const USERS_CACHE_KEY = 'users-list';
+const CACHE_TTL = 60 * 1000; // 1 minute
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const role = searchParams.get('role');
+
+    // Check cache first
+    const cacheKey = `${USERS_CACHE_KEY}-${role || 'all'}`;
+    const cached = cache.get(cacheKey);
+    if (cached) {
+      return NextResponse.json({ users: cached });
+    }
 
     const where: Record<string, unknown> = {};
     if (role) where.role = role;
@@ -41,6 +52,9 @@ export async function GET(request: NextRequest) {
         }
       }
     });
+
+    // Cache the result
+    cache.set(cacheKey, users, CACHE_TTL);
 
     return NextResponse.json({ users });
   } catch (error) {

@@ -164,13 +164,16 @@ export default function SuperAdminDashboard() {
   const [selectedCompanyIdForSettings, setSelectedCompanyIdForSettings] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchLoans();
-    fetchUsers();
-    fetchCompanies();
-    fetchProducts();
-    fetchSettings();
-    fetchAllActiveLoans();
-    fetchInterestOnlyLoans();
+    // Fetch all data in parallel for instant loading
+    Promise.all([
+      fetchLoans(),
+      fetchUsers(),
+      fetchCompanies(),
+      fetchProducts(),
+      fetchSettings(),
+      fetchAllActiveLoans(),
+      fetchInterestOnlyLoans()
+    ]).catch(console.error);
   }, []);
 
   const fetchCompanies = async () => {
