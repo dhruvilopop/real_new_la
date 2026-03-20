@@ -412,3 +412,77 @@ Key Files:
 2. /src/app/api/upload/qr-code/route.ts - Server-side upload handling
 
 ---
+
+---
+Task ID: 8
+Agent: Main Agent
+Task: Add Dedicated Payment Pages Section to All Roles (Except Accountant)
+
+Work Log:
+- Added 'payment-pages' menu item to all roles in DashboardLayout.tsx:
+  - SUPER_ADMIN: Payment Pages menu item added
+  - COMPANY: Payment Pages menu item added
+  - AGENT: Payment Pages menu item added
+  - STAFF: Payment Pages menu item added
+  - CASHIER: Payment Pages menu item added
+  - ACCOUNTANT: No Payment Pages (per requirement)
+  - CUSTOMER: No Payment Pages (customer role)
+- Removed embedded SecondaryPaymentPagesSection from all dashboards
+- Added dedicated 'payment-pages' case in renderContent() for each dashboard
+- Each dashboard now has a proper separate tab for Payment Pages
+- All users (except Accountant) see the SAME payment pages - shared data
+
+Stage Summary:
+- Payment Pages is now a dedicated sidebar menu item
+- All roles except Accountant can access and manage payment pages
+- Everyone sees and edits the same shared payment pages
+- Image upload (not links) for QR codes
+- CompanyDashboard passes companyId prop for company-specific filtering
+
+Key Files Modified:
+1. /src/components/layout/DashboardLayout.tsx - Added menu items
+2. /src/components/admin/SuperAdminDashboard.tsx - Added payment-pages case
+3. /src/components/agent/AgentDashboard.tsx - Added payment-pages case
+4. /src/components/staff/StaffDashboard.tsx - Added payment-pages case
+5. /src/components/company/CompanyDashboard.tsx - Added payment-pages case
+6. /src/components/cashier/CashierDashboard.tsx - Added payment-pages case
+
+---
+Task ID: 8
+Agent: Main Agent
+Task: Add Dedicated 'payment-pages' Tab to All 5 Dashboards
+
+Work Log:
+- Updated SuperAdminDashboard.tsx:
+  - Removed embedded SecondaryPaymentPagesSection from 'settings' case
+  - Added new 'payment-pages' case in renderContent()
+- Updated AgentDashboard.tsx:
+  - Removed embedded SecondaryPaymentPagesSection from 'emi-collection' case
+  - Added new 'payment-pages' case in renderContent()
+- Updated StaffDashboard.tsx:
+  - Removed embedded SecondaryPaymentPagesSection from 'activeLoans' case
+  - Added new 'payment-pages' case in renderContent()
+- Updated CompanyDashboard.tsx:
+  - Removed embedded SecondaryPaymentPagesSection from 'emi-collection' case
+  - Added new 'payment-pages' case in renderContent() with companyId prop
+- Updated CashierDashboard.tsx:
+  - Removed embedded SecondaryPaymentPagesSection from 'activeLoans' case
+  - Removed embedded SecondaryPaymentPagesSection from 'paymentRequests' case
+  - Added new 'payment-pages' case in renderContent()
+
+Stage Summary:
+- All 5 dashboards now have a dedicated 'payment-pages' tab in the renderContent() function
+- SecondaryPaymentPagesSection is no longer embedded in other tabs
+- Each dashboard has a clean, dedicated section for managing secondary payment pages
+- CompanyDashboard includes the companyId prop, others just use userId
+- Lint passes with no errors
+- Dev server running without issues
+
+Key Files Modified:
+1. /src/components/admin/SuperAdminDashboard.tsx
+2. /src/components/agent/AgentDashboard.tsx
+3. /src/components/staff/StaffDashboard.tsx
+4. /src/components/company/CompanyDashboard.tsx
+5. /src/components/cashier/CashierDashboard.tsx
+
+---

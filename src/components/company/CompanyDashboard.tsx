@@ -931,6 +931,12 @@ export default function CompanyDashboard() {
         return (
           <div className="space-y-6">
             <EMICollectionSection userId={user?.id || ''} userRole={user?.role || 'COMPANY'} />
+          </div>
+        );
+
+      case 'payment-pages':
+        return (
+          <div className="space-y-6">
             <SecondaryPaymentPagesSection userId={user?.id} companyId={user?.companyId} />
           </div>
         );

@@ -631,8 +631,12 @@ export default function AgentDashboard() {
                 toast({ title: 'Payment Collected', description: 'EMI payment collected and credit updated' });
               }}
             />
-            
-            {/* Secondary Payment Pages Section */}
+          </div>
+        );
+
+      case 'payment-pages':
+        return (
+          <div className="space-y-6">
             <SecondaryPaymentPagesSection userId={user?.id} />
           </div>
         );

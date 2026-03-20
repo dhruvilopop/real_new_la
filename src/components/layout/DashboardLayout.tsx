@@ -413,6 +413,7 @@ export const ROLE_MENU_ITEMS: Record<string, MenuItem[]> = {
     { id: 'activeLoans', label: 'Active Loans', icon: Wallet },
     { id: 'myCredit', label: 'My Credit', icon: IndianRupee },
     { id: 'creditManagement', label: 'Credit Management', icon: CreditCard },
+    { id: 'payment-pages', label: 'Payment Pages', icon: CreditCard },
     { id: 'users', label: 'User Management', icon: Users },
     { id: 'customers', label: 'Customers', icon: User },
     { id: 'companies', label: 'Companies', icon: Building2 },
@@ -433,6 +434,7 @@ export const ROLE_MENU_ITEMS: Record<string, MenuItem[]> = {
     { id: 'active', label: 'Active Loans', icon: CheckCircle },
     { id: 'agents', label: 'Agent Management', icon: Users },
     { id: 'personalCredits', label: 'My Credits', icon: IndianRupee },
+    { id: 'payment-pages', label: 'Payment Pages', icon: CreditCard },
     { id: 'portfolio', label: 'Portfolio', icon: PieChart },
     { id: 'risk', label: 'Risk Analysis', icon: Target }
   ],
@@ -446,6 +448,7 @@ export const ROLE_MENU_ITEMS: Record<string, MenuItem[]> = {
     { id: 'active', label: 'Active Loans', icon: CheckCircle },
     { id: 'staff', label: 'My Staff', icon: ClipboardCheck },
     { id: 'myCredit', label: 'My Credit', icon: IndianRupee },
+    { id: 'payment-pages', label: 'Payment Pages', icon: CreditCard },
     { id: 'calculator', label: 'EMI Calculator', icon: Calculator },
     { id: 'performance', label: 'Performance', icon: TrendingUp }
   ],
@@ -455,6 +458,7 @@ export const ROLE_MENU_ITEMS: Record<string, MenuItem[]> = {
     { id: 'completed', label: 'Completed', icon: CheckCircle },
     { id: 'activeLoans', label: 'Active Loans', icon: Banknote },
     { id: 'myCredit', label: 'My Credit', icon: IndianRupee },
+    { id: 'payment-pages', label: 'Payment Pages', icon: CreditCard },
     { id: 'field', label: 'Field Visits', icon: MapPin }
   ],
   CASHIER: [
@@ -463,6 +467,7 @@ export const ROLE_MENU_ITEMS: Record<string, MenuItem[]> = {
     { id: 'paymentRequests', label: 'Payment Requests', icon: FileText },
     { id: 'history', label: 'Recent', icon: Receipt },
     { id: 'activeLoans', label: 'Active Loans', icon: Banknote },
+    { id: 'payment-pages', label: 'Payment Pages', icon: CreditCard },
     { id: 'audit', label: 'Audit Logs', icon: Activity }
   ],
   CUSTOMER: [

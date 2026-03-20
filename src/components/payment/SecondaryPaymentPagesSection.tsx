@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { CreditCard, Plus, Trash2, Loader2, Building2 } from 'lucide-react';
+import { CreditCard, Plus, Trash2, Loader2, Building2, Upload, X, Image as ImageIcon } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
 interface SecondaryPaymentPage {
@@ -48,6 +48,8 @@ export default function SecondaryPaymentPagesSection({
   const [showDialog, setShowDialog] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [uploadingQr, setUploadingQr] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [formData, setFormData] = useState({
     name: '',
@@ -60,6 +62,8 @@ export default function SecondaryPaymentPagesSection({
     ifscCode: '',
     companyId: ''
   });
+
+  const [qrPreview, setQrPreview] = useState<string | null>(null);
 
   useEffect(() => {
     fetchCompanies();
@@ -109,6 +113,74 @@ export default function SecondaryPaymentPagesSection({
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleQrCodeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif'];
+    if (!allowedTypes.includes(file.type)) {
+      toast({
+        title: 'Invalid File Type',
+        description: 'Only PNG, JPG, WEBP, and GIF images are allowed.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: 'File Too Large',
+        description: 'Maximum file size is 5MB.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setUploadingQr(true);
+
+    try {
+      const formDataUpload = new FormData();
+      formDataUpload.append('file', file);
+
+      const response = await fetch('/api/upload/qr-code', {
+        method: 'POST',
+        body: formDataUpload
+      });
+
+      const data = await response.json();
+
+      if (data.success && data.url) {
+        setFormData(prev => ({ ...prev, qrCodeUrl: data.url }));
+        setQrPreview(data.url);
+        toast({
+          title: 'QR Code Uploaded',
+          description: 'QR code image has been uploaded successfully.'
+        });
+      } else {
+        throw new Error(data.error || 'Failed to upload QR code');
+      }
+    } catch (error: any) {
+      toast({
+        title: 'Upload Failed',
+        description: error.message || 'Failed to upload QR code image',
+        variant: 'destructive'
+      });
+    } finally {
+      setUploadingQr(false);
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleRemoveQrCode = () => {
+    setFormData(prev => ({ ...prev, qrCodeUrl: '' }));
+    setQrPreview(null);
   };
 
   const handleCreate = async () => {
@@ -198,6 +270,7 @@ export default function SecondaryPaymentPagesSection({
       ifscCode: '',
       companyId: companies[0]?.id || ''
     });
+    setQrPreview(null);
   };
 
   const filteredPages = selectedCompanyId === 'all' 
@@ -312,7 +385,7 @@ export default function SecondaryPaymentPagesSection({
                           <img 
                             src={page.qrCodeUrl} 
                             alt="QR Code" 
-                            className="w-24 h-24 rounded-lg border"
+                            className="w-24 h-24 rounded-lg border object-cover"
                             onError={(e) => {
                               (e.target as HTMLImageElement).src = '/placeholder-qr.png';
                             }}
@@ -330,7 +403,7 @@ export default function SecondaryPaymentPagesSection({
 
       {/* Create Payment Page Dialog */}
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Create Secondary Payment Page</DialogTitle>
             <DialogDescription>
@@ -388,14 +461,52 @@ export default function SecondaryPaymentPagesSection({
                 />
               </div>
               <div className="space-y-2">
-                <Label>QR Code URL</Label>
-                <Input 
-                  placeholder="https://... (image URL)" 
-                  value={formData.qrCodeUrl}
-                  onChange={(e) => setFormData({ ...formData, qrCodeUrl: e.target.value })}
-                />
+                <Label>QR Code Image</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleQrCodeUpload}
+                    className="hidden"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploadingQr}
+                    className="w-full"
+                  >
+                    {uploadingQr ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Upload className="h-4 w-4 mr-2" />
+                    )}
+                    {uploadingQr ? 'Uploading...' : 'Upload QR'}
+                  </Button>
+                </div>
               </div>
             </div>
+
+            {/* QR Code Preview */}
+            {(qrPreview || formData.qrCodeUrl) && (
+              <div className="relative inline-block">
+                <img 
+                  src={qrPreview || formData.qrCodeUrl} 
+                  alt="QR Code Preview" 
+                  className="w-32 h-32 rounded-lg border object-cover"
+                />
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  className="absolute -top-2 -right-2 h-6 w-6 p-0"
+                  onClick={handleRemoveQrCode}
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
+            )}
             
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">

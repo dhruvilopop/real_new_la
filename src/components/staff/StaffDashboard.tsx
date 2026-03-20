@@ -1552,10 +1552,14 @@ export default function StaffDashboard() {
               )}
             </CardContent>
           </Card>
-          
-          {/* Secondary Payment Pages Section */}
-          <SecondaryPaymentPagesSection userId={user?.id} />
         </div>
+        );
+
+      case 'payment-pages':
+        return (
+          <div className="space-y-6">
+            <SecondaryPaymentPagesSection userId={user?.id} />
+          </div>
         );
 
       case 'field':
