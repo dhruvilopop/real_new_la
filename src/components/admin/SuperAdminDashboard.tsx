@@ -4137,21 +4137,21 @@ export default function SuperAdminDashboard() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Min Interest (%)</Label>
-                  <Input type="number" step="0.1" value={productForm.minInterestRate} onChange={(e) => setProductForm({...productForm, minInterestRate: parseFloat(e.target.value)})} />
+                  <Input type="number" step="0.1" value={productForm.minInterestRate ?? ''} onChange={(e) => setProductForm({...productForm, minInterestRate: parseFloat(e.target.value) || 0})} />
                 </div>
                 <div className="space-y-2">
                   <Label>Max Interest (%)</Label>
-                  <Input type="number" step="0.1" value={productForm.maxInterestRate} onChange={(e) => setProductForm({...productForm, maxInterestRate: parseFloat(e.target.value)})} />
+                  <Input type="number" step="0.1" value={productForm.maxInterestRate ?? ''} onChange={(e) => setProductForm({...productForm, maxInterestRate: parseFloat(e.target.value) || 0})} />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Min Tenure (months)</Label>
-                  <Input type="number" value={productForm.minTenure} onChange={(e) => setProductForm({...productForm, minTenure: parseInt(e.target.value)})} />
+                  <Input type="number" value={productForm.minTenure ?? ''} onChange={(e) => setProductForm({...productForm, minTenure: parseInt(e.target.value) || 0})} />
                 </div>
                 <div className="space-y-2">
                   <Label>Max Tenure (months)</Label>
-                  <Input type="number" value={productForm.maxTenure} onChange={(e) => setProductForm({...productForm, maxTenure: parseInt(e.target.value)})} />
+                  <Input type="number" value={productForm.maxTenure ?? ''} onChange={(e) => setProductForm({...productForm, maxTenure: parseInt(e.target.value) || 0})} />
                 </div>
               </div>
             </div>
@@ -4162,11 +4162,11 @@ export default function SuperAdminDashboard() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Min Amount (₹)</Label>
-                  <Input type="number" value={productForm.minAmount} onChange={(e) => setProductForm({...productForm, minAmount: parseFloat(e.target.value)})} />
+                  <Input type="number" value={productForm.minAmount ?? ''} onChange={(e) => setProductForm({...productForm, minAmount: parseFloat(e.target.value) || 0})} />
                 </div>
                 <div className="space-y-2">
                   <Label>Max Amount (₹)</Label>
-                  <Input type="number" value={productForm.maxAmount} onChange={(e) => setProductForm({...productForm, maxAmount: parseFloat(e.target.value)})} />
+                  <Input type="number" value={productForm.maxAmount ?? ''} onChange={(e) => setProductForm({...productForm, maxAmount: parseFloat(e.target.value) || 0})} />
                 </div>
               </div>
             </div>
@@ -4177,14 +4177,14 @@ export default function SuperAdminDashboard() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Processing Fee (%) *</Label>
-                  <Input type="number" step="0.1" value={productForm.processingFeePercent} onChange={(e) => setProductForm({...productForm, processingFeePercent: parseFloat(e.target.value)})} />
+                  <Input type="number" step="0.1" value={productForm.processingFeePercent ?? ''} onChange={(e) => setProductForm({...productForm, processingFeePercent: parseFloat(e.target.value) || 0})} />
                   <p className="text-xs text-gray-500">
                     For a loan of ₹1,00,000: Fee = ₹{((productForm.processingFeePercent || 0) * 1000).toLocaleString()}
                   </p>
                 </div>
                 <div className="space-y-2">
                   <Label>Late Payment Penalty (₹)</Label>
-                  <Input type="number" value={productForm.latePaymentPenalty} onChange={(e) => setProductForm({...productForm, latePaymentPenalty: parseFloat(e.target.value)})} />
+                  <Input type="number" value={productForm.latePaymentPenalty ?? ''} onChange={(e) => setProductForm({...productForm, latePaymentPenalty: parseFloat(e.target.value) || 0})} />
                   <p className="text-xs text-gray-500">Fixed amount charged per late EMI</p>
                 </div>
               </div>
