@@ -7,6 +7,7 @@ const globalForPrisma = globalThis as unknown as {
 // Prisma configuration optimized for limited database connections
 // Hostinger MySQL has max_connections_per_hour limit (500)
 // We use connection pooling and keep-alive to minimize connections
+// Force rebuild for latePaymentPenalty field
 
 const prismaClientSingleton = () => {
   return new PrismaClient({
