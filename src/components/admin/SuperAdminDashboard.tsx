@@ -31,6 +31,7 @@ import OfflineLoansList from '@/components/offline-loan/OfflineLoansList';
 import PersonalCreditManager from '@/components/credit/PersonalCreditManager';
 import CreditManagementPage from '@/components/credit/CreditManagementPage';
 import SuperAdminMyCredit from '@/components/credit/SuperAdminMyCredit';
+import MoneySection from '@/components/credit/MoneySection';
 import LoanDetailPanel from '@/components/loan/LoanDetailPanel';
 import EMISettingsDialog from '@/components/customer/EMISettingsDialog';
 import SecondaryPaymentPagesSection from '@/components/payment/SecondaryPaymentPagesSection';
@@ -2107,6 +2108,19 @@ export default function SuperAdminDashboard() {
               </div>
             </div>
             <CreditManagementPage />
+          </div>
+        );
+
+      case 'money-section':
+        return (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">Money Section</h2>
+                <p className="text-gray-500">Track daily collections, company-wise income, and money flow</p>
+              </div>
+            </div>
+            <MoneySection />
           </div>
         );
 

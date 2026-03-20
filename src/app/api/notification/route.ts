@@ -11,15 +11,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
     }
 
-    const notifications = await db.notification.findMany({
-      where: { userId },
-      orderBy: { createdAt: 'desc' },
-      take: limit
-    });
-
-    const unreadCount = await db.notification.count({
-      where: { userId, isRead: false }
-    });
+    // Parallel queries for speed
+    const [notifications, unreadCount] = await Promise.all([
+      db.notification.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        take: limit
+      }),
+      db.notification.count({
+        where: { userId, isRead: false }
+      })
+    ]);
 
     return NextResponse.json({ success: true, notifications, unreadCount });
   } catch (error) {

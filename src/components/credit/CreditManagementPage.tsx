@@ -76,7 +76,21 @@ interface CreditTransaction {
     name: string;
     email: string;
     role: string;
+  company?: { name: string };
   };
+  loanApplication?: {
+    companyId?: string;
+    company?: { id: string; name: string };
+  };
+}
+
+// Company credit breakdown interface
+interface CompanyCreditBreakdown {
+  companyId: string;
+  companyName: string;
+  personalCredit: number;
+  companyCredit: number;
+  transactionCount: number;
 }
 
 interface LoanWithEMI {
@@ -421,6 +435,65 @@ export default function CreditManagementPage() {
     return <Badge className={className}>{label}</Badge>;
   };
 
+  // Compute breakdown for a single user
+  const getUserCreditBreakdown = (userId: string): CompanyCreditBreakdown[] => {
+    const userTransactions = transactions.filter(tx => tx.userId === userId);
+    const breakdownMap = new Map<string, CompanyCreditBreakdown>();
+    
+    userTransactions.forEach(tx => {
+      // Get company from loan application or user's company
+      let companyId = 'unknown';
+      let companyName = 'Unknown Company';
+      
+      // First check if transaction has loan application with company
+      if (tx.loanApplication?.company) {
+        companyId = tx.loanApplication.company.id || tx.loanApplication.companyId || 'unknown';
+        companyName = tx.loanApplication.company.name || 'Unknown Company';
+      } else if (tx.loanApplicationId) {
+        // Try to find in loansWithEMI
+        const loan = loansWithEMI.find(l => l.id === tx.loanApplicationId);
+        if (loan?.company) {
+          companyId = loan.companyId || 'unknown';
+          companyName = loan.company.name || 'Unknown Company';
+        }
+      } else if (tx.user?.company) {
+        // Fall back to user's company
+        companyId = tx.user.company.id || tx.user.companyId || 'unknown';
+        companyName = tx.user.company.name || 'Unknown Company';
+      } else {
+        // Last resort - get from user's stored company
+        const user = usersWithCredit.find(u => u.id === userId);
+        if (user?.company?.name) {
+          companyId = user.companyId || user.company?.name || 'unknown';
+          companyName = user.company.name;
+        }
+      }
+      
+      if (!breakdownMap.has(companyId)) {
+        breakdownMap.set(companyId, {
+          companyId,
+          companyName,
+          personalCredit: 0,
+          companyCredit: 0,
+          transactionCount: 0
+        });
+      }
+      
+      const breakdown = breakdownMap.get(companyId)!;
+      breakdown.transactionCount++;
+      
+      if (tx.creditType === 'PERSONAL') {
+        breakdown.personalCredit += tx.amount;
+      } else {
+        breakdown.companyCredit += tx.amount;
+      }
+    });
+    
+    return Array.from(breakdownMap.values()).sort((a, b) => 
+      (b.personalCredit + b.companyCredit) - (a.personalCredit + a.companyCredit)
+    );
+  };
+
   const filteredUsers = usersWithCredit.filter(u => {
     const matchesSearch = u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       u.email.toLowerCase().includes(searchQuery.toLowerCase());
@@ -688,85 +761,109 @@ export default function CreditManagementPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredUsers.map((user) => (
-                        <TableRow key={user.id} className="hover:bg-gray-50">
-                          <TableCell>
-                            <div className="flex items-center gap-3">
-                              <Avatar className="h-9 w-9">
-                                <AvatarFallback className="bg-gradient-to-br from-emerald-400 to-teal-500 text-white">
-                                  {user.name.charAt(0)}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div>
-                                <p className="font-medium text-gray-900">{user.name}</p>
-                                <p className="text-xs text-gray-500">{user.email}</p>
+                      {filteredUsers.map((user) => {
+                        const breakdown = getUserCreditBreakdown(user.id);
+                        
+                        return (
+                          <TableRow key={user.id} className="hover:bg-gray-50">
+                            <TableCell>
+                              <div className="flex items-center gap-3">
+                                <Avatar className="h-9 w-9">
+                                  <AvatarFallback className="bg-gradient-to-br from-emerald-400 to-teal-500 text-white">
+                                    {user.name.charAt(0)}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div>
+                                  <p className="font-medium text-gray-900">{user.name}</p>
+                                  <p className="text-xs text-gray-500">{user.email}</p>
+                                </div>
                               </div>
-                            </div>
-                          </TableCell>
-                          <TableCell>{getRoleBadge(user.role)}</TableCell>
-                          <TableCell className="text-gray-600">{user.company?.name || '-'}</TableCell>
-                          <TableCell className="text-right">
-                            <span className={`font-semibold ${user.personalCredit > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
-                              {formatCurrency(user.personalCredit)}
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <span className={`font-semibold ${user.companyCredit > 0 ? 'text-emerald-600' : 'text-gray-400'}`}>
-                              {formatCurrency(user.companyCredit)}
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <span className="font-bold text-gray-900">
-                              {formatCurrency(user.personalCredit + user.companyCredit)}
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-center">
-                            <div className="flex items-center justify-center gap-1">
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => {
-                                  setSelectedUser(user);
-                                  setShowUserPassbookDialog(true);
-                                }}
-                                title="View Passbook"
-                              >
-                                <BookOpen className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="border-amber-200 text-amber-700 hover:bg-amber-50"
-                                onClick={() => {
-                                  setSelectedUser(user);
-                                  setDeductCreditType('PERSONAL');
-                                  setDeductAmount(user.personalCredit > 0 ? user.personalCredit.toString() : '');
-                                  setShowDeductDialog(true);
-                                }}
-                                disabled={user.personalCredit <= 0}
-                              >
-                                <MinusCircle className="h-4 w-4 mr-1" />
-                                Personal
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="border-emerald-200 text-emerald-700 hover:bg-emerald-50"
-                                onClick={() => {
-                                  setSelectedUser(user);
-                                  setDeductCreditType('COMPANY');
-                                  setDeductAmount(user.companyCredit > 0 ? user.companyCredit.toString() : '');
-                                  setShowDeductDialog(true);
-                                }}
-                                disabled={user.companyCredit <= 0}
-                              >
-                                <MinusCircle className="h-4 w-4 mr-1" />
-                                Company
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                            </TableCell>
+                            <TableCell>{getRoleBadge(user.role)}</TableCell>
+                            <TableCell className="text-gray-600">{user.company?.name || '-'}</TableCell>
+                            <TableCell className="text-right">
+                              <span className={`font-semibold ${user.personalCredit > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
+                                {formatCurrency(user.personalCredit)}
+                              </span>
+                              {/* Show company breakdown for personal credit */}
+                              {user.personalCredit > 0 && breakdown.length > 0 && (
+                                <div className="mt-1 flex flex-wrap gap-1 justify-end">
+                                  {breakdown.filter(b => b.personalCredit > 0).map((item) => (
+                                    <Badge key={item.companyId} variant="outline" className="text-xs bg-amber-50 border-amber-200 text-amber-700">
+                                      {item.companyName}: {formatCurrency(item.personalCredit)}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <span className={`font-semibold ${user.companyCredit > 0 ? 'text-emerald-600' : 'text-gray-400'}`}>
+                                {formatCurrency(user.companyCredit)}
+                              </span>
+                              {/* Show company breakdown for company credit */}
+                              {user.companyCredit > 0 && breakdown.length > 0 && (
+                                <div className="mt-1 flex flex-wrap gap-1 justify-end">
+                                  {breakdown.filter(b => b.companyCredit > 0).map((item) => (
+                                    <Badge key={item.companyId} variant="outline" className="text-xs bg-emerald-50 border-emerald-200 text-emerald-700">
+                                      {item.companyName}: {formatCurrency(item.companyCredit)}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <span className="font-bold text-gray-900">
+                                {formatCurrency(user.personalCredit + user.companyCredit)}
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => {
+                                    setSelectedUser(user);
+                                    setShowUserPassbookDialog(true);
+                                  }}
+                                  title="View Passbook"
+                                >
+                                  <BookOpen className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="border-amber-200 text-amber-700 hover:bg-amber-50"
+                                  onClick={() => {
+                                    setSelectedUser(user);
+                                    setDeductCreditType('PERSONAL');
+                                    setDeductAmount(user.personalCredit > 0 ? user.personalCredit.toString() : '');
+                                    setShowDeductDialog(true);
+                                  }}
+                                  disabled={user.personalCredit <= 0}
+                                >
+                                  <MinusCircle className="h-4 w-4 mr-1" />
+                                  Personal
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                                  onClick={() => {
+                                    setSelectedUser(user);
+                                    setDeductCreditType('COMPANY');
+                                    setDeductAmount(user.companyCredit > 0 ? user.companyCredit.toString() : '');
+                                    setShowDeductDialog(true);
+                                  }}
+                                  disabled={user.companyCredit <= 0}
+                                >
+                                  <MinusCircle className="h-4 w-4 mr-1" />
+                                  Company
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </div>

@@ -13,7 +13,7 @@ import {
   Settings, LogOut, Menu, Search, Edit, Calculator, MapPin, AlertTriangle, PieChart,
   CreditCard, Banknote, User, ClipboardCheck, Calendar, Receipt, TrendingUp,
   Target, FileCheck, Activity, Briefcase, BookOpen, IndianRupee, Landmark, Percent,
-  FileSpreadsheet
+  FileSpreadsheet, DollarSign
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Input } from '@/components/ui/input';
@@ -413,6 +413,7 @@ export const ROLE_MENU_ITEMS: Record<string, MenuItem[]> = {
     { id: 'activeLoans', label: 'Active Loans', icon: Wallet },
     { id: 'myCredit', label: 'My Credit', icon: IndianRupee },
     { id: 'creditManagement', label: 'Credit Management', icon: CreditCard },
+    { id: 'money-section', label: 'Money Section', icon: DollarSign },
     { id: 'payment-pages', label: 'Payment Pages', icon: CreditCard },
     { id: 'users', label: 'User Management', icon: Users },
     { id: 'customers', label: 'Customers', icon: User },

@@ -32,7 +32,21 @@ export async function GET(request: NextRequest) {
               id: true,
               name: true,
               email: true,
-              role: true
+              role: true,
+              companyId: true,
+              company: {
+                select: { id: true, name: true }
+              }
+            }
+          },
+          loanApplication: {
+            select: {
+              id: true,
+              applicationNo: true,
+              companyId: true,
+              company: {
+                select: { id: true, name: true }
+              }
             }
           }
         }
