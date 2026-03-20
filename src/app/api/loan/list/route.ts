@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { cache, CacheTTL, CacheKeys } from '@/lib/cache';
 
-// Lightweight select for list view - minimal fields for list display
+// Minimal select for loan list - only essential fields
 const LOAN_LIST_SELECT = {
   id: true,
   applicationNo: true,
@@ -18,7 +18,6 @@ const LOAN_LIST_SELECT = {
   company: { select: { id: true, name: true, code: true } },
   sessionForm: {
     select: {
-      id: true,
       approvedAmount: true,
       interestRate: true,
       tenure: true,
@@ -26,9 +25,6 @@ const LOAN_LIST_SELECT = {
     }
   }
 } as const;
-
-// Cache TTL for loan list - 60 seconds (loans change frequently during processing)
-const LOAN_LIST_CACHE_TTL = CacheTTL.MEDIUM;
 
 export async function GET(request: NextRequest) {
   try {
@@ -40,8 +36,8 @@ export async function GET(request: NextRequest) {
     const staffId = searchParams.get('staffId');
     const status = searchParams.get('status');
 
-    // Generate cache key based on all query parameters
-    const cacheKey = `${CacheKeys.loansByRole(role || 'all')}-${customerId || ''}-${companyId || ''}-${agentId || ''}-${staffId || ''}-${status || ''}`;
+    // Create cache key from all params
+    const cacheKey = CacheKeys.loansByRole(role || 'all', `${customerId || ''}-${companyId || ''}-${agentId || ''}-${staffId || ''}-${status || ''}`);
     
     // Check cache first
     const cached = cache.get(cacheKey);
@@ -55,21 +51,17 @@ export async function GET(request: NextRequest) {
     if (companyId) where.companyId = companyId;
     if (status) where.status = status;
 
-    // Role-based filtering with parallel agent lookup when needed
-    let agentCompanyQuery = null;
-    if (role === 'AGENT' && agentId) {
-      agentCompanyQuery = db.user.findUnique({
-        where: { id: agentId },
-        select: { companyId: true }
-      });
-    }
-
+    // Role-based filtering
     if (role === 'SUPER_ADMIN') {
-      // Super admin sees all loans - no additional filter
+      // Super admin sees all loans
     } else if (role === 'COMPANY') {
       if (companyId) where.companyId = companyId;
     } else if (role === 'AGENT' && agentId) {
-      const agent = await agentCompanyQuery;
+      // For agent queries, we need to get their company first
+      const agent = await db.user.findUnique({
+        where: { id: agentId },
+        select: { companyId: true }
+      });
       
       where.OR = [
         { currentHandlerId: agentId },
@@ -96,8 +88,8 @@ export async function GET(request: NextRequest) {
       select: LOAN_LIST_SELECT
     });
 
-    // Cache the result
-    cache.set(cacheKey, loans, LOAN_LIST_CACHE_TTL);
+    // Cache for 1 minute
+    cache.set(cacheKey, loans, CacheTTL.MEDIUM);
 
     return NextResponse.json({ loans });
   } catch (error) {

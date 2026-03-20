@@ -2,26 +2,26 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { cache, CacheTTL, CacheKeys } from '@/lib/cache';
 
-// Cache TTL for active loans - 60 seconds (active loans status changes less frequently)
+// Cache TTL for active loans - 60 seconds
 const CACHE_TTL = CacheTTL.MEDIUM;
 
-// GET all active loans (both online and offline) with complete passbook data
+// GET all active loans - OPTIMIZED for speed
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const filter = searchParams.get('filter') || 'all'; // 'all', 'online', 'offline'
-    const includePassbook = searchParams.get('passbook') === 'true';
+    const filter = searchParams.get('filter') || 'all';
 
-    // Try to get from cache first
-    const cacheKey = `${CacheKeys.allActiveLoans()}-${filter}-${includePassbook}`;
+    // Check cache first
+    const cacheKey = `${CacheKeys.allActiveLoans()}-${filter}`;
     const cached = cache.get(cacheKey);
     if (cached) {
       return NextResponse.json(cached);
     }
 
-    // Use Promise.all for parallel queries - SUPER FAST!
+    // OPTIMIZED: Only fetch the NEXT pending EMI, not all EMIs
+    // This dramatically reduces query time and data transfer
     const [onlineLoans, offlineLoans] = await Promise.all([
-      // Fetch online loans with minimal EMI fields
+      // Fetch online loans - MINIMAL DATA
       filter === 'all' || filter === 'online' 
         ? db.loanApplication.findMany({
             where: { status: { in: ['ACTIVE', 'DISBURSED'] } },
@@ -40,43 +40,14 @@ export async function GET(request: NextRequest) {
                   approvedAmount: true,
                   interestRate: true,
                   tenure: true,
-                  emiAmount: true,
-                  totalAmount: true,
-                  totalInterest: true
+                  emiAmount: true
                 }
-              },
-              emiSchedules: {
-                orderBy: { installmentNumber: 'asc' },
-                select: {
-                  id: true,
-                  installmentNumber: true,
-                  dueDate: true,
-                  totalAmount: true,
-                  paidAmount: true,
-                  paymentStatus: true,
-                  paidDate: true,
-                  penaltyAmount: true,
-                  daysOverdue: true
-                }
-              },
-              payments: includePassbook ? {
-                where: { status: 'COMPLETED' },
-                orderBy: { createdAt: 'desc' },
-                take: 10, // Limit payments for performance
-                select: {
-                  id: true,
-                  amount: true,
-                  paymentMode: true,
-                  createdAt: true,
-                  status: true,
-                  receiptNumber: true
-                }
-              } : false
+              }
             }
           })
         : Promise.resolve([]),
       
-      // Fetch offline loans with minimal fields
+      // Fetch offline loans - MINIMAL DATA
       filter === 'all' || filter === 'offline'
         ? db.offlineLoan.findMany({
             where: { status: 'ACTIVE' },
@@ -92,37 +63,75 @@ export async function GET(request: NextRequest) {
               disbursementDate: true,
               createdAt: true,
               customerName: true,
-              customerEmail: true,
               customerPhone: true,
               customer: { select: { id: true, name: true, email: true, phone: true } },
-              company: { select: { id: true, name: true, code: true } },
-              createdBy: { select: { id: true, name: true, role: true } },
-              emis: {
-                orderBy: { installmentNumber: 'asc' },
-                select: {
-                  id: true,
-                  installmentNumber: true,
-                  dueDate: true,
-                  totalAmount: true,
-                  paidAmount: true,
-                  paymentStatus: true,
-                  paidDate: true,
-                  penaltyAmount: true,
-                  daysOverdue: true
-                }
-              }
+              company: { select: { id: true, name: true, code: true } }
             }
           })
         : Promise.resolve([])
     ]);
 
+    // Get loan IDs for fetching next EMIs
+    const onlineLoanIds = onlineLoans.map(l => l.id);
+    const offlineLoanIds = offlineLoans.map(l => l.id);
+
+    // Fetch ONLY the next pending EMI for each loan in parallel
+    const [onlineEmis, offlineEmis] = await Promise.all([
+      onlineLoanIds.length > 0 
+        ? db.eMISchedule.findMany({
+            where: {
+              loanApplicationId: { in: onlineLoanIds },
+              paymentStatus: { in: ['PENDING', 'OVERDUE', 'PARTIALLY_PAID'] }
+            },
+            orderBy: { dueDate: 'asc' },
+            select: {
+              id: true,
+              loanApplicationId: true,
+              installmentNumber: true,
+              dueDate: true,
+              totalAmount: true,
+              paymentStatus: true
+            }
+          })
+        : Promise.resolve([]),
+      
+      offlineLoanIds.length > 0
+        ? db.offlineLoanEMI.findMany({
+            where: {
+              offlineLoanId: { in: offlineLoanIds },
+              paymentStatus: { in: ['PENDING', 'OVERDUE', 'PARTIALLY_PAID'] }
+            },
+            orderBy: { dueDate: 'asc' },
+            select: {
+              id: true,
+              offlineLoanId: true,
+              installmentNumber: true,
+              dueDate: true,
+              totalAmount: true,
+              paymentStatus: true
+            }
+          })
+        : Promise.resolve([])
+    ]);
+
+    // Create maps for quick EMI lookup (only first pending EMI per loan)
+    const onlineEmiMap = new Map<string, any>();
+    for (const emi of onlineEmis) {
+      if (!onlineEmiMap.has(emi.loanApplicationId)) {
+        onlineEmiMap.set(emi.loanApplicationId, emi);
+      }
+    }
+
+    const offlineEmiMap = new Map<string, any>();
+    for (const emi of offlineEmis) {
+      if (!offlineEmiMap.has(emi.offlineLoanId)) {
+        offlineEmiMap.set(emi.offlineLoanId, emi);
+      }
+    }
+
     // Format online loans
     const formattedOnlineLoans = onlineLoans.map(loan => {
-      const pendingEmis = (loan.emiSchedules || []).filter(
-        (e: any) => ['PENDING', 'OVERDUE', 'PARTIALLY_PAID'].includes(e.paymentStatus)
-      );
-      const nextEmi = pendingEmis[0];
-
+      const nextEmi = onlineEmiMap.get(loan.id);
       return {
         id: loan.id,
         identifier: loan.applicationNo,
@@ -134,15 +143,10 @@ export async function GET(request: NextRequest) {
         interestRate: (loan.sessionForm as any)?.interestRate || 0,
         tenure: (loan.sessionForm as any)?.tenure || 0,
         emiAmount: (loan.sessionForm as any)?.emiAmount || 0,
-        totalAmount: (loan.sessionForm as any)?.totalAmount || 0,
-        totalInterest: (loan.sessionForm as any)?.totalInterest || 0,
         disbursementDate: loan.disbursedAt,
         createdAt: loan.createdAt,
         customer: loan.customer,
         company: loan.company,
-        sessionForm: loan.sessionForm,
-        emiSchedules: loan.emiSchedules,
-        payments: loan.payments || [],
         nextEmi: nextEmi ? {
           id: nextEmi.id,
           dueDate: nextEmi.dueDate,
@@ -155,11 +159,7 @@ export async function GET(request: NextRequest) {
 
     // Format offline loans
     const formattedOfflineLoans = offlineLoans.map(loan => {
-      const pendingEmis = ((loan as any).emis || []).filter(
-        (e: any) => ['PENDING', 'OVERDUE', 'PARTIALLY_PAID'].includes(e.paymentStatus)
-      );
-      const nextEmi = pendingEmis[0];
-
+      const nextEmi = offlineEmiMap.get(loan.id);
       return {
         id: loan.id,
         identifier: loan.loanNumber,
@@ -171,33 +171,15 @@ export async function GET(request: NextRequest) {
         interestRate: loan.interestRate,
         tenure: loan.tenure,
         emiAmount: loan.emiAmount,
-        totalAmount: (loan.loanAmount || 0) + (loan.loanAmount * (loan.interestRate / 100) * (loan.tenure / 12)),
-        totalInterest: (loan.loanAmount || 0) * (loan.interestRate / 100) * (loan.tenure / 12),
         disbursementDate: loan.disbursementDate,
         createdAt: loan.createdAt,
         customer: loan.customer || {
           id: null,
           name: loan.customerName,
-          email: loan.customerEmail,
+          email: null,
           phone: loan.customerPhone
         },
         company: loan.company,
-        createdBy: (loan as any).createdBy,
-        emiSchedules: ((loan as any).emis || []).map((emi: any) => ({
-          id: emi.id,
-          installmentNumber: emi.installmentNumber,
-          dueDate: emi.dueDate,
-          totalAmount: emi.totalAmount,
-          principalAmount: emi.principalAmount,
-          interestAmount: emi.interestAmount,
-          paidAmount: emi.paidAmount,
-          paymentStatus: emi.paymentStatus,
-          paidDate: emi.paidDate,
-          paymentMode: emi.paymentMode,
-          penaltyAmount: emi.penaltyAmount,
-          daysOverdue: emi.daysOverdue
-        })),
-        payments: [],
         nextEmi: nextEmi ? {
           id: nextEmi.id,
           dueDate: nextEmi.dueDate,
@@ -208,11 +190,11 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    // Combine and sort by creation date
+    // Combine and sort
     const allLoans = [...formattedOnlineLoans, ...formattedOfflineLoans]
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-    // Calculate statistics
+    // Calculate stats
     const stats = {
       totalOnline: formattedOnlineLoans.length,
       totalOffline: formattedOfflineLoans.length,
