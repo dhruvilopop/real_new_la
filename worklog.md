@@ -300,3 +300,33 @@ model BankAccount {
 3. Add/Delete payment pages
 
 ---
+
+---
+Task ID: 5
+Agent: Main Agent
+Task: Move Per-EMI Settings from Customer View to Staff Roles
+
+Work Log:
+- Removed Settings icon from CustomerLoanDetailPage (customer view)
+- Added EMI Settings to SuperAdminDashboard loan detail panel
+- Added EMI Settings to EMICollectionSection (used by Agent, Staff, Company dashboards)
+- Added EMI Settings to LoanDetailPanel (used by Staff, Cashier dashboards)
+- Updated all components with proper state management for EMI settings dialog
+- Fixed TypeScript errors and verified all changes compile correctly
+
+Stage Summary:
+- Customers can no longer change EMI payment settings
+- Staff roles (SuperAdmin, Agent, Staff, Company, Cashier) can now control payment options per EMI
+- Settings available in:
+  - SuperAdminDashboard → Active Loans → View Loan → EMI Tab
+  - EMICollectionSection → Settings icon on each EMI card
+  - LoanDetailPanel → Settings icon on each EMI row
+- Git commit: 605eb9b - pushed to master
+
+Key Files Modified:
+1. /src/components/customer/CustomerLoanDetailPage.tsx - Removed Settings icon
+2. /src/components/admin/SuperAdminDashboard.tsx - Added EMI Settings button
+3. /src/components/emi/EMICollectionSection.tsx - Added EMI Settings button
+4. /src/components/loan/LoanDetailPanel.tsx - Added EMI Settings button
+
+---
