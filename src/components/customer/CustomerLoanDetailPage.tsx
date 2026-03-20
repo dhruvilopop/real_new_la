@@ -17,13 +17,12 @@ import {
   ArrowLeft, Wallet, Calendar, Clock, IndianRupee, Percent, CreditCard, 
   CheckCircle, AlertCircle, AlertTriangle, ChevronRight, Loader2,
   CalendarClock, TrendingUp, FileText, Building2, Phone, Mail,
-  QrCode, Copy, Upload, Image as ImageIcon, Info, Settings
+  QrCode, Copy, Upload, Image as ImageIcon, Info
 } from 'lucide-react';
 import { formatCurrency, formatDate } from '@/utils/helpers';
 import { toast } from '@/hooks/use-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
-import EMISettingsDialog from './EMISettingsDialog';
 
 interface EMISchedule {
   id: string;
@@ -124,7 +123,6 @@ export default function CustomerLoanDetailPage() {
   // Payment dialogs
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   const [showPaymentPage, setShowPaymentPage] = useState(false);
-  const [showSettingsDialog, setShowSettingsDialog] = useState(false);
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [selectedPaymentType, setSelectedPaymentType] = useState<'FULL_EMI' | 'PARTIAL' | 'INTEREST_ONLY'>('FULL_EMI');
   
@@ -870,35 +868,7 @@ export default function CustomerLoanDetailPage() {
                             </div>
                           )}
                           {!isPaid && canPay && (
-                            <div className="flex items-center gap-1">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-8 w-8 p-0"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setSelectedEmi(emi);
-                                  setShowSettingsDialog(true);
-                                }}
-                              >
-                                <Settings className="h-4 w-4 text-gray-400 hover:text-gray-600" />
-                              </Button>
-                              <ChevronRight className="h-5 w-5 text-amber-500" />
-                            </div>
-                          )}
-                          {!isPaid && !canPay && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 w-8 p-0"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedEmi(emi);
-                                setShowSettingsDialog(true);
-                              }}
-                            >
-                              <Settings className="h-4 w-4 text-gray-400 hover:text-gray-600" />
-                            </Button>
+                            <ChevronRight className="h-5 w-5 text-amber-500" />
                           )}
                         </div>
                       </div>
@@ -910,19 +880,6 @@ export default function CustomerLoanDetailPage() {
           </CardContent>
         </Card>
       </div>
-
-      {/* EMI Settings Dialog */}
-      <EMISettingsDialog
-        open={showSettingsDialog}
-        onOpenChange={setShowSettingsDialog}
-        emi={selectedEmi}
-        loanId={loanId}
-        companyId={loan?.company?.id}
-        onSettingsSaved={() => {
-          fetchLoanDetails();
-          fetchPaymentSettings();
-        }}
-      />
 
       {/* Payment Options Dialog */}
       <Dialog open={showPaymentDialog} onOpenChange={(open) => {

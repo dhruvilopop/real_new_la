@@ -32,6 +32,7 @@ import PersonalCreditManager from '@/components/credit/PersonalCreditManager';
 import CreditManagementPage from '@/components/credit/CreditManagementPage';
 import SuperAdminMyCredit from '@/components/credit/SuperAdminMyCredit';
 import LoanDetailPanel from '@/components/loan/LoanDetailPanel';
+import EMISettingsDialog from '@/components/customer/EMISettingsDialog';
 
 interface Loan {
   id: string; applicationNo: string; status: string; requestedAmount: number; loanType: string;
@@ -154,6 +155,12 @@ export default function SuperAdminDashboard() {
   const [showResetDialog, setShowResetDialog] = useState(false);
   const [resetConfirmText, setResetConfirmText] = useState('');
   const [resetting, setResetting] = useState(false);
+  
+  // EMI Settings Dialog state
+  const [showEmiSettingsDialog, setShowEmiSettingsDialog] = useState(false);
+  const [selectedEmiForSettings, setSelectedEmiForSettings] = useState<any>(null);
+  const [selectedLoanIdForSettings, setSelectedLoanIdForSettings] = useState<string | null>(null);
+  const [selectedCompanyIdForSettings, setSelectedCompanyIdForSettings] = useState<string | null>(null);
 
   useEffect(() => {
     fetchLoans();
@@ -3946,10 +3953,13 @@ export default function SuperAdminDashboard() {
                                 <TableHead className="text-xs">Total</TableHead>
                                 <TableHead className="text-xs">Paid</TableHead>
                                 <TableHead className="text-xs">Status</TableHead>
+                                <TableHead className="text-xs">Actions</TableHead>
                               </TableRow>
                             </TableHeader>
                             <TableBody>
-                              {loanDetails.loan.emiSchedules?.map((emi: any) => (
+                              {loanDetails.loan.emiSchedules?.map((emi: any) => {
+                                const isPaid = emi.paymentStatus === 'PAID' || emi.paymentStatus === 'INTEREST_ONLY_PAID';
+                                return (
                                 <TableRow key={emi.id}>
                                   <TableCell className="text-xs font-medium">{emi.installmentNumber}</TableCell>
                                   <TableCell className="text-xs">{formatDate(emi.dueDate)}</TableCell>
@@ -3959,7 +3969,7 @@ export default function SuperAdminDashboard() {
                                   <TableCell className="text-xs text-green-600">{emi.paidAmount > 0 ? formatCurrency(emi.paidAmount) : '-'}</TableCell>
                                   <TableCell>
                                     <Badge className={`text-xs ${
-                                      emi.paymentStatus === 'PAID' || emi.paymentStatus === 'INTEREST_ONLY_PAID' ? 'bg-green-100 text-green-700' :
+                                      isPaid ? 'bg-green-100 text-green-700' :
                                       emi.paymentStatus === 'OVERDUE' ? 'bg-red-100 text-red-700' :
                                       emi.paymentStatus === 'PARTIALLY_PAID' ? 'bg-amber-100 text-amber-700' :
                                       'bg-blue-100 text-blue-700'
@@ -3967,8 +3977,24 @@ export default function SuperAdminDashboard() {
                                       {emi.paymentStatus === 'INTEREST_ONLY_PAID' ? 'Interest Paid' : emi.paymentStatus}
                                     </Badge>
                                   </TableCell>
+                                  <TableCell>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-7 w-7 p-0"
+                                      onClick={() => {
+                                        setSelectedEmiForSettings(emi);
+                                        setSelectedLoanIdForSettings(loanDetails.loan.id);
+                                        setSelectedCompanyIdForSettings(loanDetails.loan.company?.id || null);
+                                        setShowEmiSettingsDialog(true);
+                                      }}
+                                      title="Payment Settings"
+                                    >
+                                      <Settings className="h-3 w-3" />
+                                    </Button>
+                                  </TableCell>
                                 </TableRow>
-                              ))}
+                              );})}
                             </TableBody>
                           </Table>
                         </div>
@@ -4036,6 +4062,21 @@ export default function SuperAdminDashboard() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* EMI Settings Dialog */}
+      <EMISettingsDialog
+        open={showEmiSettingsDialog}
+        onOpenChange={setShowEmiSettingsDialog}
+        emi={selectedEmiForSettings}
+        loanId={selectedLoanIdForSettings}
+        companyId={selectedCompanyIdForSettings}
+        onSettingsSaved={() => {
+          // Refresh loan details if we have a loan selected
+          if (selectedLoanIdForSettings) {
+            fetchLoanDetails(selectedLoanIdForSettings);
+          }
+        }}
+      />
 
       {/* Product Dialog */}
       <Dialog open={showProductDialog} onOpenChange={setShowProductDialog}>

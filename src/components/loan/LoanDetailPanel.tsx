@@ -17,12 +17,13 @@ import {
   X, Eye, User, Mail, Phone, MapPin, Building, Briefcase, Banknote, 
   FileText, Calendar, DollarSign, Clock, CheckCircle, XCircle, 
   CreditCard, Receipt, Upload, Download, Copy, Key, Users, 
-  Loader2, AlertCircle, ChevronRight, IndianRupee, FileCheck, Wallet, Percent
+  Loader2, AlertCircle, ChevronRight, IndianRupee, FileCheck, Wallet, Percent, Settings
 } from 'lucide-react';
 import { formatCurrency, formatDate } from '@/utils/helpers';
 import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
+import EMISettingsDialog from '@/components/customer/EMISettingsDialog';
 
 interface LoanDetailPanelProps {
   loanId: string | null;
@@ -295,6 +296,10 @@ export default function LoanDetailPanel({ loanId, open, onClose, onEMIPaid, user
   // Credit info
   const [personalCredit, setPersonalCredit] = useState(0);
   const [companyCredit, setCompanyCredit] = useState(0);
+
+  // EMI Settings Dialog
+  const [showEmiSettingsDialog, setShowEmiSettingsDialog] = useState(false);
+  const [selectedEmiForSettings, setSelectedEmiForSettings] = useState<EMISchedule | null>(null);
 
   // Helper function for clipboard copy
   const handleCopy = async (text: string) => {
@@ -1475,6 +1480,19 @@ export default function LoanDetailPanel({ loanId, open, onClose, onEMIPaid, user
                                       >
                                         <IndianRupee className="h-4 w-4 mr-1" /> Pay
                                       </Button>
+                                      {/* EMI Settings - Available for all staff roles */}
+                                      <Button 
+                                        size="sm" 
+                                        variant="ghost"
+                                        className="h-8 w-8 p-0"
+                                        onClick={() => {
+                                          setSelectedEmiForSettings(emi);
+                                          setShowEmiSettingsDialog(true);
+                                        }}
+                                        title="Payment Settings"
+                                      >
+                                        <Settings className="h-4 w-4 text-gray-500" />
+                                      </Button>
                                       {/* EMI Date Change - Available for all roles except ACCOUNTANT */}
                                       {currentUserRole !== 'ACCOUNTANT' && (
                                         <Button 
@@ -2012,6 +2030,25 @@ export default function LoanDetailPanel({ loanId, open, onClose, onEMIPaid, user
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* EMI Settings Dialog */}
+      <EMISettingsDialog
+        open={showEmiSettingsDialog}
+        onOpenChange={setShowEmiSettingsDialog}
+        emi={selectedEmiForSettings ? {
+          id: selectedEmiForSettings.id,
+          installmentNumber: selectedEmiForSettings.emiNumber,
+          totalAmount: selectedEmiForSettings.emiAmount,
+          dueDate: selectedEmiForSettings.dueDate,
+          paymentStatus: selectedEmiForSettings.status,
+          paidAmount: selectedEmiForSettings.paidAmount
+        } : null}
+        loanId={loanId || ''}
+        companyId={loanDetails?.company?.id}
+        onSettingsSaved={() => {
+          fetchEMISchedules();
+        }}
+      />
     </>
   );
 }

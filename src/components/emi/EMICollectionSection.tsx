@@ -19,9 +19,10 @@ import {
 import {
   Calendar, IndianRupee, Clock, AlertTriangle, CheckCircle,
   Phone, MapPin, User, Wallet, CreditCard, Banknote, Receipt,
-  Upload, FileCheck, Building2, Info, X, ImageIcon
+  Upload, FileCheck, Building2, Info, X, ImageIcon, Settings
 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
+import EMISettingsDialog from '@/components/customer/EMISettingsDialog';
 
 interface EMIItem {
   id: string;
@@ -74,6 +75,10 @@ export default function EMICollectionSection({ userId, userRole, onPaymentComple
   
   // Active tab
   const [activeTab, setActiveTab] = useState<'today' | 'tomorrow' | 'overdue'>('today');
+  
+  // EMI Settings dialog
+  const [showEmiSettingsDialog, setShowEmiSettingsDialog] = useState(false);
+  const [selectedEmiForSettings, setSelectedEmiForSettings] = useState<any>(null);
   
   // File input ref
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -360,14 +365,31 @@ export default function EMICollectionSection({ userId, userRole, onPaymentComple
           <div className="text-right">
             <p className="text-lg font-bold text-gray-900">{formatCurrency(emi.totalAmount)}</p>
             <p className="text-xs text-gray-500">Due: {formatDate(emi.dueDate)}</p>
-            <Button
-              size="sm"
-              className="mt-2 bg-emerald-500 hover:bg-emerald-600"
-              onClick={() => openPaymentDialog(emi, type)}
-            >
-              <IndianRupee className="h-4 w-4 mr-1" />
-              Pay
-            </Button>
+            <div className="flex gap-1 mt-2 justify-end">
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-8 w-8 p-0"
+                onClick={() => {
+                  setSelectedEmiForSettings({
+                    ...emi,
+                    loanApplicationId: emi.loanApplication?.id
+                  });
+                  setShowEmiSettingsDialog(true);
+                }}
+                title="Payment Settings"
+              >
+                <Settings className="h-4 w-4 text-gray-500" />
+              </Button>
+              <Button
+                size="sm"
+                className="bg-emerald-500 hover:bg-emerald-600"
+                onClick={() => openPaymentDialog(emi, type)}
+              >
+                <IndianRupee className="h-4 w-4 mr-1" />
+                Pay
+              </Button>
+            </div>
           </div>
         </div>
       </motion.div>
@@ -751,6 +773,18 @@ export default function EMICollectionSection({ userId, userRole, onPaymentComple
           )}
         </DialogContent>
       </Dialog>
+
+      {/* EMI Settings Dialog */}
+      <EMISettingsDialog
+        open={showEmiSettingsDialog}
+        onOpenChange={setShowEmiSettingsDialog}
+        emi={selectedEmiForSettings}
+        loanId={selectedEmiForSettings?.loanApplicationId}
+        onSettingsSaved={() => {
+          fetchEmis();
+          onPaymentComplete?.();
+        }}
+      />
     </>
   );
 }
