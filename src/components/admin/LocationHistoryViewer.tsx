@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { 
   MapPin, Users, Clock, Search, RefreshCw, Loader2, 
   Smartphone, Monitor, Tablet, Globe, ExternalLink,
-  Calendar, Filter, AlertCircle
+  Calendar, Filter, AlertCircle, Shield, Building2, User, Briefcase, CreditCard, Wallet
 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { motion } from 'framer-motion';
@@ -50,12 +50,23 @@ const ACTION_CONFIG: Record<string, { label: string; className: string; icon: Re
   LOGIN: { label: 'Logged In', className: 'bg-cyan-100 text-cyan-700', icon: Users },
 };
 
+const ROLE_CONFIG: Record<string, { label: string; icon: React.ElementType; color: string }> = {
+  SUPER_ADMIN: { label: 'Super Admin', icon: Shield, color: 'bg-red-500' },
+  COMPANY: { label: 'Company', icon: Building2, color: 'bg-blue-500' },
+  AGENT: { label: 'Agent', icon: Briefcase, color: 'bg-emerald-500' },
+  STAFF: { label: 'Staff', icon: User, color: 'bg-purple-500' },
+  CASHIER: { label: 'Cashier', icon: CreditCard, color: 'bg-amber-500' },
+  CUSTOMER: { label: 'Customer', icon: Wallet, color: 'bg-teal-500' },
+  ACCOUNTANT: { label: 'Accountant', icon: CreditCard, color: 'bg-indigo-500' },
+};
+
 export default function LocationHistoryViewer() {
   const [locations, setLocations] = useState<LocationRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterAction, setFilterAction] = useState('all');
+  const [filterRole, setFilterRole] = useState('all');
   const [totalRecords, setTotalRecords] = useState(0);
 
   const fetchLocations = async (isRefresh = false) => {
@@ -90,13 +101,24 @@ export default function LocationHistoryViewer() {
     fetchLocations();
   }, []);
 
+  // Get unique roles from location data
+  const availableRoles = [...new Set(locations.map(l => l.user?.role).filter(Boolean))];
+  
+  // Group locations by role for stats
+  const roleStats = availableRoles.map(role => ({
+    role,
+    count: locations.filter(l => l.user?.role === role).length,
+    config: ROLE_CONFIG[role] || { label: role, icon: User, color: 'bg-gray-500' }
+  })).sort((a, b) => b.count - a.count);
+
   const filteredLocations = locations.filter(loc => {
     const matchesSearch = 
       loc.user?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       loc.user?.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
       loc.user?.phone?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesAction = filterAction === 'all' || loc.action === filterAction;
-    return matchesSearch && matchesAction;
+    const matchesRole = filterRole === 'all' || loc.user?.role === filterRole;
+    return matchesSearch && matchesAction && matchesRole;
   });
 
   const formatDate = (date: string) => {
@@ -169,7 +191,7 @@ export default function LocationHistoryViewer() {
                 <p className="text-2xl font-bold">
                   {new Set(locations.map(l => l.userId)).size}
                 </p>
-                <p className="text-xs text-emerald-200 mt-1">Customers with location data</p>
+                <p className="text-xs text-emerald-200 mt-1">Users with location data</p>
               </div>
               <div className="p-3 bg-white/20 rounded-full">
                 <Users className="h-6 w-6" />
@@ -196,17 +218,61 @@ export default function LocationHistoryViewer() {
         </Card>
       </div>
 
-      {/* Filters */}
+      {/* Role Filter Cards */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Shield className="h-5 w-5 text-blue-600" />
+            Filter by Role
+          </CardTitle>
+          <CardDescription>
+            Click on a role to filter location logs
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant={filterRole === 'all' ? 'default' : 'outline'}
+              className={filterRole === 'all' ? 'bg-gray-800 hover:bg-gray-700' : ''}
+              onClick={() => setFilterRole('all')}
+            >
+              <Users className="h-4 w-4 mr-2" />
+              All Roles ({locations.length})
+            </Button>
+            {roleStats.map(({ role, count, config }) => {
+              const Icon = config.icon;
+              return (
+                <Button
+                  key={role}
+                  variant={filterRole === role ? 'default' : 'outline'}
+                  className={filterRole === role ? 'bg-gray-800 hover:bg-gray-700' : ''}
+                  onClick={() => setFilterRole(role)}
+                >
+                  <Icon className="h-4 w-4 mr-2" />
+                  {config.label} ({count})
+                </Button>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Location Logs */}
       <Card>
         <CardHeader className="pb-3">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div>
               <CardTitle className="flex items-center gap-2">
                 <MapPin className="h-5 w-5 text-blue-600" />
-                Customer Location History
+                Location Logs
+                {filterRole !== 'all' && (
+                  <Badge variant="secondary" className="ml-2">
+                    {ROLE_CONFIG[filterRole]?.label || filterRole}: {filteredLocations.length}
+                  </Badge>
+                )}
               </CardTitle>
               <CardDescription>
-                Last {locations.length} location records from all customers
+                Showing {filteredLocations.length} of {locations.length} location records
               </CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -250,11 +316,13 @@ export default function LocationHistoryViewer() {
               <p>No location records found</p>
             </div>
           ) : (
-            <ScrollArea className="h-[600px]">
+            <ScrollArea className="h-[500px]">
               <div className="space-y-3 pr-4">
                 {filteredLocations.map((loc, index) => {
                   const actionConfig = ACTION_CONFIG[loc.action] || { label: loc.action, className: 'bg-gray-100 text-gray-700', icon: MapPin };
                   const ActionIcon = actionConfig.icon;
+                  const roleConfig = ROLE_CONFIG[loc.user?.role] || { label: loc.user?.role || 'Unknown', icon: User, color: 'bg-gray-500' };
+                  const RoleIcon = roleConfig.icon;
                   
                   return (
                     <motion.div
@@ -266,14 +334,18 @@ export default function LocationHistoryViewer() {
                     >
                       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                         <div className="flex items-center gap-4">
-                          <Avatar className="h-10 w-10 bg-gradient-to-br from-blue-400 to-indigo-500">
+                          <Avatar className={`h-10 w-10 ${roleConfig.color}`}>
                             <AvatarFallback className="bg-transparent text-white font-semibold">
                               {loc.user?.name?.charAt(0) || loc.user?.email?.charAt(0)?.toUpperCase() || 'U'}
                             </AvatarFallback>
                           </Avatar>
                           <div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
                               <h4 className="font-semibold text-gray-900">{loc.user?.name || 'Unknown'}</h4>
+                              <Badge variant="outline" className="text-xs">
+                                <RoleIcon className="h-3 w-3 mr-1" />
+                                {roleConfig.label}
+                              </Badge>
                               <Badge className={actionConfig.className}>
                                 <ActionIcon className="h-3 w-3 mr-1" />
                                 {actionConfig.label}
