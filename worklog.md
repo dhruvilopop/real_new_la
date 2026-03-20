@@ -330,3 +330,48 @@ Key Files Modified:
 4. /src/components/loan/LoanDetailPanel.tsx - Added EMI Settings button
 
 ---
+
+---
+Task ID: 6
+Agent: Main Agent
+Task: Add Secondary Payment Pages Section to All Staff Roles (Except Accountant)
+
+Work Log:
+- Created reusable SecondaryPaymentPagesSection component in src/components/payment/
+- Added the component to SuperAdminDashboard (in Settings tab)
+- Added the component to AgentDashboard (in EMI Collection tab)
+- Added the component to CompanyDashboard (in EMI Collection tab)
+- Added the component to StaffDashboard (in Active Loans tab)
+- Added the component to CashierDashboard (in Active Loans and Payment Requests tabs)
+- Removed old Secondary Payment Pages UI from AccountantDashboard
+- Updated API to fetch all secondary pages or filter by company
+- Added API endpoint for creating secondary pages via POST with action parameter
+
+Stage Summary:
+- All staff roles (SuperAdmin, Agent, Staff, Company, Cashier) now have Secondary Payment Pages section
+- Accountant role does NOT have this section (per user requirement)
+- Each company can have multiple secondary payment pages
+- When staff changes EMI payment settings, they only see pages belonging to the loan's company
+- Customers will see the selected payment page when paying their EMI
+- Git commit: ae3c708 - pushed to master
+
+Key Files Created:
+1. /src/components/payment/SecondaryPaymentPagesSection.tsx - New reusable component
+
+Key Files Modified:
+1. /src/components/admin/SuperAdminDashboard.tsx
+2. /src/components/agent/AgentDashboard.tsx
+3. /src/components/company/CompanyDashboard.tsx
+4. /src/components/staff/StaffDashboard.tsx
+5. /src/components/cashier/CashierDashboard.tsx
+6. /src/components/accountant/AccountantDashboard.tsx
+7. /src/app/api/emi-payment-settings/route.ts
+
+Flow:
+1. Staff (any role except Accountant) creates a Secondary Payment Page for their company
+2. When another staff member opens EMI Settings for a loan:
+   - If loan is from Company A → only Company A's secondary pages are shown
+   - Staff selects a payment page (e.g., "Partner Collection Point A1")
+3. Customer pays EMI → sees the selected payment page details
+
+---
