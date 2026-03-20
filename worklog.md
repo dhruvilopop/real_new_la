@@ -375,3 +375,40 @@ Flow:
 3. Customer pays EMI → sees the selected payment page details
 
 ---
+
+---
+Task ID: 7
+Agent: Main Agent
+Task: Verify Secondary Payment Pages Implementation with Image Upload
+
+Work Log:
+- Reviewed all dashboards for SecondaryPaymentPagesSection integration
+- Verified component is added to: SuperAdminDashboard, AgentDashboard, StaffDashboard, CompanyDashboard, CashierDashboard
+- Verified AccountantDashboard does NOT have SecondaryPaymentPagesSection (correct per requirements)
+- Verified image upload functionality uses file upload (not URL link) via /api/upload/qr-code endpoint
+- The QR code upload: saves to /public/uploads/qr-codes/ with unique filename
+- No URL input field - only upload button for QR code images
+
+Stage Summary:
+- Secondary Payment Pages feature is fully implemented with IMAGE UPLOAD (not links)
+- All staff roles except Accountant can create secondary payment pages
+- QR Code images are uploaded directly to server (public/uploads/qr-codes/)
+- Maximum file size: 5MB
+- Allowed formats: PNG, JPG, WEBP, GIF
+- Images are stored locally and served from /uploads/qr-codes/
+
+Image Upload Implementation Details:
+1. File input with accept="image/*"
+2. Upload button triggers file selection
+3. On select, file is sent to /api/upload/qr-code via POST
+4. Server validates file type and size
+5. Creates unique filename with timestamp
+6. Saves to public/uploads/qr-codes/
+7. Returns URL path (/uploads/qr-codes/filename.png)
+8. Preview shown in dialog with remove option
+
+Key Files:
+1. /src/components/payment/SecondaryPaymentPagesSection.tsx - UI with upload
+2. /src/app/api/upload/qr-code/route.ts - Server-side upload handling
+
+---
