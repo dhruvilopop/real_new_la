@@ -11,9 +11,10 @@ export async function GET(request: NextRequest) {
     const type = searchParams.get('type');
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
+    const companyId = searchParams.get('companyId');
 
-    // Check cache first
-    const cacheKey = `money-logs:${type || 'all'}:${limit}:${offset}:${startDate || ''}:${endDate || ''}`;
+    // Check cache first (include companyId in cache key)
+    const cacheKey = `money-logs:${companyId || 'all'}:${type || 'all'}:${limit}:${offset}:${startDate || ''}:${endDate || ''}`;
     const cachedResult = cache.get<any>(cacheKey);
     if (cachedResult) {
       return NextResponse.json(cachedResult);
@@ -27,189 +28,12 @@ export async function GET(request: NextRequest) {
       }
     } : {};
 
+    // Build company filter
+    const companyFilter = companyId && companyId !== 'all' && companyId !== 'default' 
+      ? { companyId } 
+      : {};
+
     // Execute ALL queries in parallel
-    const queries = [];
-    
-    // 1. EMI Transactions
-    if (!type || type === 'all' || type === 'emi') {
-      queries.push(
-        db.creditTransaction.findMany({
-          where: { ...dateFilter, sourceType: 'EMI_PAYMENT' },
-          orderBy: { createdAt: 'desc' },
-          take: limit,
-          skip: offset,
-          select: {
-            id: true,
-            amount: true,
-            paymentMode: true,
-            creditType: true,
-            description: true,
-            customerName: true,
-            customerPhone: true,
-            loanApplicationNo: true,
-            emiDueDate: true,
-            emiAmount: true,
-            principalComponent: true,
-            interestComponent: true,
-            companyBalanceAfter: true,
-            personalBalanceAfter: true,
-            chequeNumber: true,
-            utrNumber: true,
-            bankRefNumber: true,
-            collectedFrom: true,
-            collectionLocation: true,
-            transactionDate: true,
-            createdAt: true,
-            installmentNumber: true,
-            transactionType: true,
-            sourceType: true,
-            user: { select: { id: true, name: true, email: true, role: true } }
-          }
-        })
-      );
-    } else {
-      queries.push(Promise.resolve([]));
-    }
-
-    // 2. Credit Transactions (non-EMI)
-    if (!type || type === 'all' || type === 'credit') {
-      queries.push(
-        db.creditTransaction.findMany({
-          where: { ...dateFilter, sourceType: { not: 'EMI_PAYMENT' } },
-          orderBy: { createdAt: 'desc' },
-          take: limit,
-          skip: offset,
-          select: {
-            id: true,
-            amount: true,
-            paymentMode: true,
-            creditType: true,
-            description: true,
-            customerName: true,
-            customerPhone: true,
-            loanApplicationNo: true,
-            companyBalanceAfter: true,
-            personalBalanceAfter: true,
-            chequeNumber: true,
-            utrNumber: true,
-            bankRefNumber: true,
-            transactionDate: true,
-            createdAt: true,
-            transactionType: true,
-            sourceType: true,
-            user: { select: { id: true, name: true, email: true, role: true } }
-          }
-        })
-      );
-    } else {
-      queries.push(Promise.resolve([]));
-    }
-
-    // 3. Loan Disbursements
-    if (!type || type === 'all' || type === 'disbursement') {
-      queries.push(
-        db.loanApplication.findMany({
-          where: {
-            ...dateFilter,
-            status: { in: ['DISBURSED', 'ACTIVE'] },
-            disbursedAmount: { not: null }
-          },
-          orderBy: { disbursedAt: 'desc' },
-          take: limit,
-          skip: offset,
-          select: {
-            id: true,
-            applicationNo: true,
-            disbursedAmount: true,
-            disbursedAt: true,
-            disbursedMode: true,
-            disbursedRef: true,
-            createdAt: true,
-            customer: { select: { id: true, name: true, email: true, phone: true } },
-            company: { select: { id: true, name: true } },
-            disbursedBy: { select: { id: true, name: true, email: true, role: true } }
-          }
-        })
-      );
-      
-      // 3b. Offline Loans
-      queries.push(
-        db.offlineLoan.findMany({
-          where: { ...dateFilter, status: 'ACTIVE' },
-          orderBy: { disbursementDate: 'desc' },
-          take: limit,
-          skip: offset,
-          select: {
-            id: true,
-            loanNumber: true,
-            loanAmount: true,
-            disbursementDate: true,
-            disbursementMode: true,
-            disbursementRef: true,
-            createdAt: true,
-            customerName: true,
-            customerPhone: true,
-            company: { select: { id: true, name: true } }
-          }
-        })
-      );
-    } else {
-      queries.push(Promise.resolve([]));
-      queries.push(Promise.resolve([]));
-    }
-
-    // 4. Bank Transactions
-    if (!type || type === 'all' || type === 'bank') {
-      queries.push(
-        db.bankTransaction.findMany({
-          where: dateFilter,
-          orderBy: { createdAt: 'desc' },
-          take: limit,
-          skip: offset,
-          select: {
-            id: true,
-            transactionType: true,
-            amount: true,
-            description: true,
-            balanceAfter: true,
-            referenceType: true,
-            transactionDate: true,
-            createdAt: true,
-            bankAccount: { select: { id: true, bankName: true, accountNumber: true } }
-          }
-        })
-      );
-    } else {
-      queries.push(Promise.resolve([]));
-    }
-
-    // 5. Expenses
-    if (!type || type === 'all' || type === 'expense') {
-      queries.push(
-        db.expense.findMany({
-          where: dateFilter,
-          orderBy: { createdAt: 'desc' },
-          take: limit,
-          skip: offset,
-          select: {
-            id: true,
-            expenseNumber: true,
-            expenseType: true,
-            amount: true,
-            description: true,
-            paymentMode: true,
-            paymentDate: true,
-            isApproved: true,
-            createdAt: true,
-            createdById: true
-          }
-        })
-      );
-    } else {
-      queries.push(Promise.resolve([]));
-    }
-
-    // Execute all queries in parallel
     const [
       emiTransactions,
       creditTransactions,
@@ -217,17 +41,199 @@ export async function GET(request: NextRequest) {
       offlineLoans,
       bankTransactions,
       expenses
-    ] = await Promise.all(queries);
+    ] = await Promise.all([
+      // 1. EMI Transactions from CreditTransaction
+      (!type || type === 'all' || type === 'emi') 
+        ? db.creditTransaction.findMany({
+            where: { ...dateFilter, ...companyFilter, sourceType: 'EMI_PAYMENT' },
+            orderBy: { createdAt: 'desc' },
+            take: limit,
+            skip: offset,
+            select: {
+              id: true,
+              amount: true,
+              paymentMode: true,
+              creditType: true,
+              description: true,
+              customerName: true,
+              customerPhone: true,
+              loanApplicationNo: true,
+              emiDueDate: true,
+              emiAmount: true,
+              principalComponent: true,
+              interestComponent: true,
+              companyBalanceAfter: true,
+              personalBalanceAfter: true,
+              chequeNumber: true,
+              utrNumber: true,
+              bankRefNumber: true,
+              collectedFrom: true,
+              collectionLocation: true,
+              transactionDate: true,
+              createdAt: true,
+              installmentNumber: true,
+              transactionType: true,
+              sourceType: true,
+              userId: true,
+              user: { select: { id: true, name: true, email: true, role: true, companyId: true, company: { select: { id: true, name: true } } } }
+            }
+          })
+        : Promise.resolve([]),
+      
+      // 2. Credit Transactions (non-EMI)
+      (!type || type === 'all' || type === 'credit')
+        ? db.creditTransaction.findMany({
+            where: { ...dateFilter, ...companyFilter, sourceType: { not: 'EMI_PAYMENT' } },
+            orderBy: { createdAt: 'desc' },
+            take: limit,
+            skip: offset,
+            select: {
+              id: true,
+              amount: true,
+              paymentMode: true,
+              creditType: true,
+              description: true,
+              customerName: true,
+              customerPhone: true,
+              loanApplicationNo: true,
+              companyBalanceAfter: true,
+              personalBalanceAfter: true,
+              chequeNumber: true,
+              utrNumber: true,
+              bankRefNumber: true,
+              transactionDate: true,
+              createdAt: true,
+              transactionType: true,
+              sourceType: true,
+              userId: true,
+              user: { select: { id: true, name: true, email: true, role: true, companyId: true, company: { select: { id: true, name: true } } } }
+            }
+          })
+        : Promise.resolve([]),
+      
+      // 3. Loan Disbursements
+      (!type || type === 'all' || type === 'disbursement')
+        ? db.loanApplication.findMany({
+            where: {
+              ...dateFilter,
+              ...companyFilter,
+              status: { in: ['DISBURSED', 'ACTIVE'] },
+              disbursedAmount: { not: null }
+            },
+            orderBy: { disbursedAt: 'desc' },
+            take: limit,
+            skip: offset,
+            select: {
+              id: true,
+              applicationNo: true,
+              disbursedAmount: true,
+              disbursedAt: true,
+              disbursementMode: true,
+              disbursementRef: true,
+              createdAt: true,
+              customerId: true,
+              companyId: true,
+              customer: { select: { id: true, name: true, email: true, phone: true } },
+              company: { select: { id: true, name: true } },
+              disbursedById: true,
+              disbursedBy: { select: { id: true, name: true, email: true, role: true } }
+            }
+          })
+        : Promise.resolve([]),
+      
+      // 4. Offline Loans
+      (!type || type === 'all' || type === 'disbursement')
+        ? db.offlineLoan.findMany({
+            where: { 
+              ...dateFilter,
+              ...companyFilter,
+              status: 'ACTIVE' 
+            },
+            orderBy: { disbursementDate: 'desc' },
+            take: limit,
+            skip: offset,
+            select: {
+              id: true,
+              loanNumber: true,
+              loanAmount: true,
+              disbursementDate: true,
+              disbursementMode: true,
+              disbursementRef: true,
+              createdAt: true,
+              customerName: true,
+              customerPhone: true,
+              companyId: true,
+              company: { select: { id: true, name: true } }
+            }
+          })
+        : Promise.resolve([]),
+      
+      // 5. Bank Transactions
+      (!type || type === 'all' || type === 'bank')
+        ? db.bankTransaction.findMany({
+            where: dateFilter,
+            orderBy: { createdAt: 'desc' },
+            take: limit,
+            skip: offset,
+            select: {
+              id: true,
+              transactionType: true,
+              amount: true,
+              description: true,
+              balanceAfter: true,
+              referenceType: true,
+              transactionDate: true,
+              createdAt: true,
+              bankAccountId: true,
+              bankAccount: { 
+                select: { 
+                  id: true, 
+                  bankName: true, 
+                  accountNumber: true,
+                  companyId: true,
+                  company: { select: { id: true, name: true } }
+                } 
+              }
+            }
+          })
+        : Promise.resolve([]),
+      
+      // 6. Expenses
+      (!type || type === 'all' || type === 'expense')
+        ? db.expense.findMany({
+            where: { ...dateFilter, ...companyFilter },
+            orderBy: { createdAt: 'desc' },
+            take: limit,
+            skip: offset,
+            select: {
+              id: true,
+              expenseNumber: true,
+              expenseType: true,
+              amount: true,
+              description: true,
+              paymentMode: true,
+              paymentDate: true,
+              isApproved: true,
+              createdAt: true,
+              createdById: true,
+              companyId: true,
+              company: { select: { id: true, name: true } }
+            }
+          })
+        : Promise.resolve([])
+    ]);
 
     // Get expense creators in a single query
     let expenseCreators: Map<string, any> = new Map();
     if (expenses.length > 0) {
-      const creatorIds = [...new Set(expenses.map((e: any) => e.createdById))];
-      const creators = await db.user.findMany({
-        where: { id: { in: creatorIds } },
-        select: { id: true, name: true, email: true, role: true }
-      });
-      expenseCreators = new Map(creators.map(c => [c.id, c]));
+      const creatorIds = [...new Set(expenses.map((e: any) => e.createdById).filter(Boolean))];
+      if (creatorIds.length > 0) {
+        const creators = await db.user.findMany({
+          where: { id: { in: creatorIds } },
+          select: { id: true, name: true, email: true, role: true }
+        });
+        expenseCreators = new Map(creators.map(c => [c.id, c]));
+      }
     }
 
     // Build money logs array
@@ -235,6 +241,7 @@ export async function GET(request: NextRequest) {
 
     // Process EMI Transactions
     emiTransactions.forEach((t: any) => {
+      const userCompany = t.user?.company;
       moneyLogs.push({
         id: t.id,
         type: 'EMI_PAYMENT',
@@ -259,7 +266,9 @@ export async function GET(request: NextRequest) {
         collectionLocation: t.collectionLocation,
         transactionDate: t.transactionDate,
         createdAt: t.createdAt,
-        createdBy: t.user
+        createdBy: t.user,
+        companyId: t.user?.companyId || userCompany?.id,
+        companyName: userCompany?.name
       });
     });
 
@@ -271,6 +280,7 @@ export async function GET(request: NextRequest) {
                       t.transactionType === 'SETTLEMENT' ? 'Settlement' :
                       'Credit Transfer';
       
+      const userCompany = t.user?.company;
       moneyLogs.push({
         id: t.id,
         type: t.transactionType,
@@ -290,7 +300,9 @@ export async function GET(request: NextRequest) {
         bankRefNumber: t.bankRefNumber,
         transactionDate: t.transactionDate,
         createdAt: t.createdAt,
-        createdBy: t.user
+        createdBy: t.user,
+        companyId: t.user?.companyId || userCompany?.id,
+        companyName: userCompany?.name
       });
     });
 
@@ -305,9 +317,10 @@ export async function GET(request: NextRequest) {
         customerName: loan.customer?.name,
         customerPhone: loan.customer?.phone,
         loanApplicationNo: loan.applicationNo,
+        companyId: loan.companyId,
         companyName: loan.company?.name,
-        disbursementMode: loan.disbursedMode,
-        disbursementRef: loan.disbursedRef,
+        disbursementMode: loan.disbursementMode,
+        disbursementRef: loan.disbursementRef,
         transactionDate: loan.disbursedAt,
         createdAt: loan.disbursedAt,
         createdBy: loan.disbursedBy
@@ -325,6 +338,7 @@ export async function GET(request: NextRequest) {
         customerName: loan.customerName,
         customerPhone: loan.customerPhone,
         loanApplicationNo: loan.loanNumber,
+        companyId: loan.companyId,
         companyName: loan.company?.name,
         disbursementMode: loan.disbursementMode,
         disbursementRef: loan.disbursementRef,
@@ -345,6 +359,8 @@ export async function GET(request: NextRequest) {
         referenceType: t.referenceType,
         bankName: t.bankAccount?.bankName,
         accountNumber: t.bankAccount?.accountNumber,
+        companyId: t.bankAccount?.companyId,
+        companyName: t.bankAccount?.company?.name,
         transactionDate: t.transactionDate,
         createdAt: t.createdAt
       });
@@ -352,7 +368,7 @@ export async function GET(request: NextRequest) {
 
     // Process Expenses
     expenses.forEach((e: any) => {
-      const creator = expenseCreators.get(e.createdById);
+      const creator = e.createdById ? expenseCreators.get(e.createdById) : null;
       moneyLogs.push({
         id: e.id,
         type: 'EXPENSE',
@@ -363,6 +379,8 @@ export async function GET(request: NextRequest) {
         paymentMode: e.paymentMode,
         paymentDate: e.paymentDate,
         isApproved: e.isApproved,
+        companyId: e.companyId,
+        companyName: e.company?.name,
         createdAt: e.createdAt,
         createdBy: creator ? { id: creator.id, name: creator.name, email: creator.email, role: creator.role } : null
       });
@@ -416,6 +434,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: false,
       error: 'Failed to fetch money logs',
+      details: error instanceof Error ? error.message : 'Unknown error',
       logs: [],
       stats: {
         totalEMICollection: 0,

@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    // Get EMI details
+    // Get EMI details with loan and company info
     const emi = await db.eMISchedule.findUnique({
       where: { id: emiId },
       include: {
@@ -54,6 +54,10 @@ export async function POST(request: NextRequest) {
     if (!emi) {
       return NextResponse.json({ error: 'EMI not found' }, { status: 404 });
     }
+
+    // Get the loan's company ID - IMPORTANT: All transactions go to THIS company
+    const loanCompanyId = emi.loanApplication?.companyId;
+    const loanCompany = emi.loanApplication?.company;
 
     // Sequential Payment Validation - Check if previous EMIs are paid
     const previousEmis = await db.eMISchedule.findMany({
@@ -193,21 +197,40 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    // Create Bank Transaction - MONEY IN (EMI Collection)
-    // This increases the bank balance when EMI is collected
+    // ============================================
+    // COMPANY-SPECIFIC BANK TRANSACTION
+    // Money goes to the LOAN'S COMPANY bank account
+    // ============================================
     if (paymentMode === 'BANK_TRANSFER' || paymentMode === 'ONLINE' || paymentMode === 'UPI') {
-      // Get or create a default bank account for EMI collections
-      let bankAccount = await db.bankAccount.findFirst({
-        where: { isDefault: true, isActive: true }
-      });
+      // Find the company's default bank account
+      let companyBankAccount = null;
+      
+      if (loanCompanyId) {
+        // Get the loan company's default bank account
+        companyBankAccount = await db.bankAccount.findFirst({
+          where: { 
+            companyId: loanCompanyId,
+            isActive: true
+          },
+          orderBy: { isDefault: 'desc' }
+        });
+      }
 
-      if (!bankAccount) {
-        // Create a default bank account if none exists
-        bankAccount = await db.bankAccount.create({
+      // If no company bank account found, fall back to default
+      if (!companyBankAccount) {
+        companyBankAccount = await db.bankAccount.findFirst({
+          where: { isDefault: true, isActive: true }
+        });
+      }
+
+      // Create bank account if none exists
+      if (!companyBankAccount && loanCompanyId) {
+        companyBankAccount = await db.bankAccount.create({
           data: {
-            bankName: 'SMFC Finance Bank',
-            accountNumber: 'SMFC-DEFAULT-001',
-            accountName: 'SMFC Finance - EMI Collections',
+            companyId: loanCompanyId,
+            bankName: `${loanCompany?.name || 'Company'} Bank`,
+            accountNumber: `${loanCompany?.code || 'CO'}-DEFAULT-001`,
+            accountName: `${loanCompany?.name || 'Company'} - EMI Collections`,
             accountType: 'CURRENT',
             openingBalance: 0,
             currentBalance: 0,
@@ -217,27 +240,31 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // Update bank balance - EMI collection increases balance
-      await db.bankAccount.update({
-        where: { id: bankAccount.id },
-        data: {
-          currentBalance: { increment: paidAmount }
-        }
-      });
+      if (companyBankAccount) {
+        // Update company bank balance - EMI collection INCREASES balance
+        const newBalance = companyBankAccount.currentBalance + paidAmount;
+        
+        await db.bankAccount.update({
+          where: { id: companyBankAccount.id },
+          data: {
+            currentBalance: newBalance
+          }
+        });
 
-      // Create bank transaction log
-      await db.bankTransaction.create({
-        data: {
-          bankAccountId: bankAccount.id,
-          transactionType: 'CREDIT',
-          amount: paidAmount,
-          balanceAfter: bankAccount.currentBalance + paidAmount,
-          description: `EMI Collection - ${emi.loanApplication?.applicationNo || loanId} - EMI #${emi.installmentNumber}`,
-          referenceType: 'EMI_PAYMENT',
-          referenceId: payment.id,
-          createdById: paidBy
-        }
-      });
+        // Create bank transaction log for the COMPANY'S bank account
+        await db.bankTransaction.create({
+          data: {
+            bankAccountId: companyBankAccount.id,
+            transactionType: 'CREDIT',
+            amount: paidAmount,
+            balanceAfter: newBalance,
+            description: `EMI Collection - ${emi.loanApplication?.applicationNo || loanId} - EMI #${emi.installmentNumber} - ${loanCompany?.name || 'Company'}`,
+            referenceType: 'EMI_PAYMENT',
+            referenceId: payment.id,
+            createdById: paidBy
+          }
+        });
+      }
     }
 
     // Handle rescheduling for partial payment
@@ -245,7 +272,6 @@ export async function POST(request: NextRequest) {
       // Calculate remaining amount after partial payment
       const remainingAfterPartial = remainingAmount - partialAmount;
       
-      // Create or update a deferred payment record for the remaining amount
       // Shift subsequent EMI due dates
       const subsequentEmis = await db.eMISchedule.findMany({
         where: {
@@ -379,7 +405,7 @@ export async function POST(request: NextRequest) {
           loanApplicationNo: emi.loanApplication?.applicationNo,
           emiDueDate: emi.dueDate,
           emiAmount: emi.totalAmount,
-          description: `EMI Payment - ${emi.loanApplication?.applicationNo || loanId}`,
+          description: `EMI Payment - ${emi.loanApplication?.applicationNo || loanId} - ${loanCompany?.name || ''}`,
           transactionDate: new Date()
         }
       });
@@ -392,11 +418,11 @@ export async function POST(request: NextRequest) {
           credit: newTotalCredit
         }
       });
-    } else if (creditType === 'COMPANY' && companyId) {
-      // Get company's current credit balance
+    } else if (creditType === 'COMPANY' && loanCompanyId) {
+      // COMPANY CREDIT - Add to the LOAN'S COMPANY credit
       const company = await db.company.findUnique({
-        where: { id: companyId },
-        select: { companyCredit: true }
+        where: { id: loanCompanyId },
+        select: { companyCredit: true, name: true }
       });
       
       const newCompanyCredit = (company?.companyCredit || 0) + paidAmount;
@@ -419,14 +445,14 @@ export async function POST(request: NextRequest) {
           loanApplicationNo: emi.loanApplication?.applicationNo,
           emiDueDate: emi.dueDate,
           emiAmount: emi.totalAmount,
-          description: `EMI Payment - ${emi.loanApplication?.applicationNo || loanId}`,
+          description: `EMI Payment - ${emi.loanApplication?.applicationNo || loanId} - ${company?.name || ''}`,
           transactionDate: new Date()
         }
       });
       
-      // Update company's credit
+      // Update the LOAN'S COMPANY credit (not the collector's company)
       await db.company.update({
-        where: { id: companyId },
+        where: { id: loanCompanyId },
         data: {
           companyCredit: newCompanyCredit
         }
@@ -466,11 +492,12 @@ export async function POST(request: NextRequest) {
           paymentMode, 
           paymentType,
           creditType, 
-          companyId: creditType === 'COMPANY' ? companyId : null,
+          companyId: loanCompanyId,
+          companyName: loanCompany?.name,
           partialAmount: paymentType === 'PARTIAL_PAYMENT' ? partialAmount : null,
           nextPaymentDate: paymentType === 'PARTIAL_PAYMENT' ? nextPaymentDate : null
         }),
-        description: `${paymentType === 'FULL_EMI' ? 'Full EMI' : paymentType === 'PARTIAL_PAYMENT' ? 'Partial' : 'Interest Only'} payment of ₹${paidAmount.toFixed(2)} for EMI #${emi.installmentNumber}`
+        description: `${paymentType === 'FULL_EMI' ? 'Full EMI' : paymentType === 'PARTIAL_PAYMENT' ? 'Partial' : 'Interest Only'} payment of ₹${paidAmount.toFixed(2)} for EMI #${emi.installmentNumber} - Company: ${loanCompany?.name || 'N/A'}`
       }
     });
 
@@ -487,7 +514,9 @@ export async function POST(request: NextRequest) {
         isInterestOnly: updatedEMI.isInterestOnly,
         nextPaymentDate: updatedEMI.nextPaymentDate,
         creditType,
-        creditedTo: creditType === 'PERSONAL' ? paidBy : companyId,
+        creditedTo: creditType === 'PERSONAL' ? paidBy : loanCompanyId,
+        companyId: loanCompanyId,
+        companyName: loanCompany?.name,
         paymentId: payment.id,
         receiptNumber: payment.receiptNumber
       }

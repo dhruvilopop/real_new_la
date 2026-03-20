@@ -1237,10 +1237,18 @@ export default function AccountantDashboard() {
     );
   };
 
-  // Fetch money logs
+  // Fetch money logs with company filter
   const fetchMoneyLogs = async () => {
     try {
-      const res = await fetch('/api/accounting/money-logs?limit=500');
+      const companyFilter = selectedCompanyIds.length > 0 
+        ? selectedCompanyIds.join(',') 
+        : (user?.companyId || '');
+      
+      const url = companyFilter 
+        ? `/api/accounting/money-logs?limit=200&companyId=${companyFilter}`
+        : '/api/accounting/money-logs?limit=200';
+      
+      const res = await fetch(url);
       const data = await res.json();
       if (data.success) {
         setMoneyLogs(data.logs || []);

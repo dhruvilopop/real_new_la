@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { format } from 'date-fns';
-
-// Cache for Excel data
-const excelCache: Map<string, { data: any; timestamp: number }> = new Map();
-const CACHE_TTL = 60000; // 1 minute cache
+import { cache, CacheTTL } from '@/lib/cache';
 
 // GET - Generate comprehensive Excel data for government reporting
 export async function GET(request: NextRequest) {
@@ -14,26 +11,29 @@ export async function GET(request: NextRequest) {
     const companyIds = searchParams.get('companyIds')?.split(',').filter(Boolean) || [];
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
-    const format_type = searchParams.get('format') || 'json'; // json or csv
+    const format_type = searchParams.get('format') || 'json';
 
     // Check cache
-    const cacheKey = `${reportType}_${companyIds.join('_')}_${startDate}_${endDate}`;
-    const cached = excelCache.get(cacheKey);
-    if (cached && (Date.now() - cached.timestamp) < CACHE_TTL) {
+    const cacheKey = `excel:${reportType}:${companyIds.join(',')}:${startDate || ''}:${endDate || ''}`;
+    const cached = cache.get<any>(cacheKey);
+    if (cached) {
       if (format_type === 'csv') {
-        return new NextResponse(cached.data.csv, {
+        return new NextResponse(cached.csv, {
           headers: {
             'Content-Type': 'text/csv',
-            'Content-Disposition': `attachment; filename="${cached.data.filename}"`
+            'Content-Disposition': `attachment; filename="${cached.filename}"`
           }
         });
       }
-      return NextResponse.json({ success: true, ...cached.data });
+      return NextResponse.json({ success: true, ...cached });
     }
 
     let data: any = {};
     
     switch (reportType) {
+      case 'customer-loan-details':
+        data = await getCustomerLoanDetails(companyIds, startDate, endDate);
+        break;
       case 'emi-collection':
         data = await getEMICollectionData(companyIds, startDate, endDate);
         break;
@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
       const filename = `${reportType}_${format(new Date(), 'yyyyMMdd_HHmmss')}.csv`;
       
       // Cache the result
-      excelCache.set(cacheKey, { data: { csv, filename, ...data }, timestamp: Date.now() });
+      cache.set(cacheKey, { csv, filename, ...data }, CacheTTL.SHORT);
       
       return new NextResponse(csv, {
         headers: {
@@ -81,13 +81,271 @@ export async function GET(request: NextRequest) {
     }
 
     // Cache the result
-    excelCache.set(cacheKey, { data, timestamp: Date.now() });
+    cache.set(cacheKey, data, CacheTTL.SHORT);
 
     return NextResponse.json({ success: true, ...data });
   } catch (error) {
     console.error('Excel export error:', error);
     return NextResponse.json({ error: 'Failed to generate report' }, { status: 500 });
   }
+}
+
+// COMPREHENSIVE CUSTOMER-WISE LOAN DETAILS WITH ALL EMI DATES
+async function getCustomerLoanDetails(companyIds: string[], startDate?: string | null, endDate?: string | null) {
+  const whereClause: any = {};
+  if (companyIds.length > 0) {
+    whereClause.companyId = { in: companyIds };
+  }
+
+  const dateFilter: any = {};
+  if (startDate) dateFilter.gte = new Date(startDate);
+  if (endDate) dateFilter.lte = new Date(endDate);
+
+  // Fetch all online loans with complete EMI schedules
+  const onlineLoans = await db.loanApplication.findMany({
+    where: {
+      ...whereClause,
+      status: { in: ['ACTIVE', 'DISBURSED', 'CLOSED'] }
+    },
+    include: {
+      customer: true,
+      company: true,
+      sessionForm: true,
+      emiSchedules: {
+        orderBy: { installmentNumber: 'asc' }
+      },
+      payments: {
+        where: { status: 'COMPLETED' },
+        orderBy: { createdAt: 'desc' }
+      }
+    },
+    orderBy: { createdAt: 'desc' }
+  });
+
+  // Fetch all offline loans with complete EMI schedules
+  const offlineLoans = await db.offlineLoan.findMany({
+    where: {
+      status: { in: ['ACTIVE', 'CLOSED'] }
+    },
+    include: {
+      customer: true,
+      company: true,
+      emis: {
+        orderBy: { installmentNumber: 'asc' }
+      }
+    },
+    orderBy: { createdAt: 'desc' }
+  });
+
+  const records: any[] = [];
+
+  // Process online loans - ONE ROW PER CUSTOMER with loan summary
+  for (const loan of onlineLoans) {
+    const customer = loan.customer;
+    const emiSchedules = loan.emiSchedules || [];
+    const payments = loan.payments || [];
+    
+    // Create EMI dates string
+    const emiDates = emiSchedules.map((emi, idx) => 
+      `EMI ${idx + 1}: ${format(new Date(emi.dueDate), 'dd/MM/yyyy')} (${emi.paymentStatus})`
+    ).join('; ');
+    
+    // Create paid EMI dates
+    const paidEmiDates = emiSchedules
+      .filter(e => e.paymentStatus === 'PAID')
+      .map((emi, idx) => 
+        `EMI ${emi.installmentNumber}: Paid on ${emi.paidDate ? format(new Date(emi.paidDate), 'dd/MM/yyyy') : 'N/A'} - ₹${emi.paidAmount?.toLocaleString() || 0}`
+      ).join('; ');
+    
+    // Calculate totals
+    const totalEMIAmount = emiSchedules.reduce((sum, e) => sum + e.totalAmount, 0);
+    const totalPaid = emiSchedules.reduce((sum, e) => sum + (e.paidAmount || 0), 0);
+    const totalPrincipalPaid = emiSchedules.reduce((sum, e) => sum + (e.paidPrincipal || 0), 0);
+    const totalInterestPaid = emiSchedules.reduce((sum, e) => sum + (e.paidInterest || 0), 0);
+    const pendingAmount = totalEMIAmount - totalPaid;
+    const emisPaid = emiSchedules.filter(e => e.paymentStatus === 'PAID').length;
+    const emisPending = emiSchedules.filter(e => ['PENDING', 'OVERDUE'].includes(e.paymentStatus)).length;
+    const emisOverdue = emiSchedules.filter(e => e.paymentStatus === 'OVERDUE').length;
+
+    records.push({
+      'Loan Type': 'ONLINE',
+      'Loan ID': loan.applicationNo,
+      'Loan Status': loan.status,
+      'Disbursement Date': loan.disbursedAt ? format(new Date(loan.disbursedAt), 'dd/MM/yyyy') : 'N/A',
+      
+      // Customer Details
+      'Customer ID': customer?.id || 'N/A',
+      'Customer Name': customer?.name || loan.firstName + ' ' + loan.lastName,
+      'Customer Phone': customer?.phone || loan.phone || 'N/A',
+      'Customer Email': customer?.email || loan.email || 'N/A',
+      'Customer PAN': loan.panNumber || customer?.panNumber || 'N/A',
+      'Customer Aadhaar': loan.aadhaarNumber ? `XXXX-XXXX-${loan.aadhaarNumber.slice(-4)}` : 'N/A',
+      'Customer Address': customer?.address || loan.address || 'N/A',
+      'Customer City': customer?.city || 'N/A',
+      'Customer State': customer?.state || 'N/A',
+      'Customer Pincode': customer?.pincode || loan.pincode || 'N/A',
+      'Employment Type': customer?.employmentType || 'N/A',
+      'Monthly Income': customer?.monthlyIncome || 0,
+      
+      // Company Details
+      'Company ID': loan.companyId,
+      'Company Name': loan.company?.name || 'N/A',
+      'Company Code': loan.company?.code || 'N/A',
+      
+      // Loan Amount Details
+      'Requested Amount': loan.requestedAmount,
+      'Approved Amount': loan.sessionForm?.approvedAmount || loan.requestedAmount,
+      'Disbursed Amount': loan.disbursedAmount || loan.sessionForm?.approvedAmount || loan.requestedAmount,
+      'Interest Rate (%)': loan.sessionForm?.interestRate || 0,
+      'Tenure (Months)': loan.sessionForm?.tenure || 0,
+      'EMI Amount': loan.sessionForm?.emiAmount || 0,
+      'Processing Fee': loan.sessionForm?.processingFee || 0,
+      'Total Interest': loan.sessionForm?.totalInterest || 0,
+      'Total Repayment': loan.sessionForm?.totalAmount || 0,
+      
+      // EMI Summary
+      'Total EMIs': emiSchedules.length,
+      'EMIs Paid': emisPaid,
+      'EMIs Pending': emisPending,
+      'EMIs Overdue': emisOverdue,
+      'Total EMI Amount': totalEMIAmount,
+      'Total Paid': totalPaid,
+      'Principal Paid': totalPrincipalPaid,
+      'Interest Paid': totalInterestPaid,
+      'Outstanding Balance': pendingAmount,
+      
+      // EMI Schedule Dates
+      'EMI Due Dates': emiDates,
+      'Paid EMI Details': paidEmiDates || 'None',
+      
+      // Next EMI
+      'Next EMI Due Date': emiSchedules.find(e => ['PENDING', 'OVERDUE'].includes(e.paymentStatus))?.dueDate 
+        ? format(new Date(emiSchedules.find(e => ['PENDING', 'OVERDUE'].includes(e.paymentStatus))!.dueDate), 'dd/MM/yyyy')
+        : 'All Paid',
+      'Next EMI Amount': emiSchedules.find(e => ['PENDING', 'OVERDUE'].includes(e.paymentStatus))?.totalAmount || 0,
+      
+      // Dates
+      'Application Date': format(new Date(loan.createdAt), 'dd/MM/yyyy'),
+      'Last Updated': format(new Date(loan.updatedAt), 'dd/MM/yyyy'),
+      
+      // Purpose
+      'Loan Purpose': loan.purpose || 'N/A',
+      'Notes': loan.notes || 'N/A'
+    });
+  }
+
+  // Process offline loans
+  for (const loan of offlineLoans) {
+    const customer = loan.customer;
+    const emis = loan.emis || [];
+    
+    // Create EMI dates string
+    const emiDates = emis.map((emi, idx) => 
+      `EMI ${idx + 1}: ${format(new Date(emi.dueDate), 'dd/MM/yyyy')} (${emi.paymentStatus})`
+    ).join('; ');
+    
+    // Create paid EMI dates
+    const paidEmiDates = emis
+      .filter(e => e.paymentStatus === 'PAID')
+      .map((emi) => 
+        `EMI ${emi.installmentNumber}: Paid on ${emi.paidDate ? format(new Date(emi.paidDate), 'dd/MM/yyyy') : 'N/A'} - ₹${emi.paidAmount?.toLocaleString() || 0}`
+      ).join('; ');
+    
+    // Calculate totals
+    const totalEMIAmount = emis.reduce((sum, e) => sum + e.totalAmount, 0);
+    const totalPaid = emis.reduce((sum, e) => sum + (e.paidAmount || 0), 0);
+    const totalPrincipalPaid = emis.reduce((sum, e) => sum + (e.paidPrincipal || 0), 0);
+    const totalInterestPaid = emis.reduce((sum, e) => sum + (e.paidInterest || 0), 0);
+    const pendingAmount = totalEMIAmount - totalPaid;
+    const emisPaid = emis.filter(e => e.paymentStatus === 'PAID').length;
+    const emisPending = emis.filter(e => ['PENDING', 'OVERDUE'].includes(e.paymentStatus)).length;
+    const emisOverdue = emis.filter(e => e.paymentStatus === 'OVERDUE').length;
+
+    records.push({
+      'Loan Type': 'OFFLINE',
+      'Loan ID': loan.loanNumber,
+      'Loan Status': loan.status,
+      'Disbursement Date': loan.disbursementDate ? format(new Date(loan.disbursementDate), 'dd/MM/yyyy') : 'N/A',
+      
+      // Customer Details
+      'Customer ID': customer?.id || loan.customerId || 'N/A',
+      'Customer Name': customer?.name || loan.customerName || 'N/A',
+      'Customer Phone': customer?.phone || loan.customerPhone || 'N/A',
+      'Customer Email': customer?.email || loan.customerEmail || 'N/A',
+      'Customer PAN': 'N/A',
+      'Customer Aadhaar': 'N/A',
+      'Customer Address': loan.customerAddress || 'N/A',
+      'Customer City': 'N/A',
+      'Customer State': 'N/A',
+      'Customer Pincode': 'N/A',
+      'Employment Type': 'N/A',
+      'Monthly Income': 0,
+      
+      // Company Details
+      'Company ID': loan.companyId,
+      'Company Name': loan.company?.name || 'N/A',
+      'Company Code': loan.company?.code || 'N/A',
+      
+      // Loan Amount Details
+      'Requested Amount': loan.loanAmount,
+      'Approved Amount': loan.loanAmount,
+      'Disbursed Amount': loan.loanAmount,
+      'Interest Rate (%)': loan.interestRate || 0,
+      'Tenure (Months)': loan.tenure || 0,
+      'EMI Amount': loan.emiAmount || 0,
+      'Processing Fee': loan.processingFee || 0,
+      'Total Interest': emis.reduce((sum, e) => sum + e.interestAmount, 0),
+      'Total Repayment': totalEMIAmount,
+      
+      // EMI Summary
+      'Total EMIs': emis.length,
+      'EMIs Paid': emisPaid,
+      'EMIs Pending': emisPending,
+      'EMIs Overdue': emisOverdue,
+      'Total EMI Amount': totalEMIAmount,
+      'Total Paid': totalPaid,
+      'Principal Paid': totalPrincipalPaid,
+      'Interest Paid': totalInterestPaid,
+      'Outstanding Balance': pendingAmount,
+      
+      // EMI Schedule Dates
+      'EMI Due Dates': emiDates,
+      'Paid EMI Details': paidEmiDates || 'None',
+      
+      // Next EMI
+      'Next EMI Due Date': emis.find(e => ['PENDING', 'OVERDUE'].includes(e.paymentStatus))?.dueDate 
+        ? format(new Date(emis.find(e => ['PENDING', 'OVERDUE'].includes(e.paymentStatus))!.dueDate), 'dd/MM/yyyy')
+        : 'All Paid',
+      'Next EMI Amount': emis.find(e => ['PENDING', 'OVERDUE'].includes(e.paymentStatus))?.totalAmount || 0,
+      
+      // Dates
+      'Application Date': format(new Date(loan.createdAt), 'dd/MM/yyyy'),
+      'Last Updated': format(new Date(loan.updatedAt), 'dd/MM/yyyy'),
+      
+      // Purpose
+      'Loan Purpose': loan.loanType || 'N/A',
+      'Notes': loan.notes || 'N/A'
+    });
+  }
+
+  return {
+    title: 'Customer-Wise Loan Details with EMI Schedule',
+    records,
+    summary: {
+      totalLoans: records.length,
+      onlineLoans: records.filter(r => r['Loan Type'] === 'ONLINE').length,
+      offlineLoans: records.filter(r => r['Loan Type'] === 'OFFLINE').length,
+      totalDisbursed: records.reduce((sum, r) => sum + (r['Disbursed Amount'] || 0), 0),
+      totalOutstanding: records.reduce((sum, r) => sum + (r['Outstanding Balance'] || 0), 0),
+      byCompany: records.reduce((acc, r) => {
+        const company = r['Company Name'];
+        if (!acc[company]) acc[company] = { count: 0, outstanding: 0 };
+        acc[company].count++;
+        acc[company].outstanding += r['Outstanding Balance'] || 0;
+        return acc;
+      }, {} as Record<string, { count: number; outstanding: number }>)
+    }
+  };
 }
 
 // EMI Collection Data
@@ -111,7 +369,7 @@ async function getEMICollectionData(companyIds: string[], startDate?: string | n
     include: {
       customer: true,
       emiSchedules: {
-        where: Object.keys(dateFilter).length > 0 ? { paidDate: dateFilter } : {},
+        where: Object.keys(dateFilter).length > 0 ? { paidDate: dateFilter } : { paymentStatus: 'PAID' },
         orderBy: { dueDate: 'asc' }
       },
       company: true,
@@ -127,7 +385,7 @@ async function getEMICollectionData(companyIds: string[], startDate?: string | n
     include: {
       customer: true,
       emis: {
-        where: Object.keys(dateFilter).length > 0 ? { paidDate: dateFilter } : {},
+        where: Object.keys(dateFilter).length > 0 ? { paidDate: dateFilter } : { paymentStatus: 'PAID' },
         orderBy: { dueDate: 'asc' }
       },
       company: true
@@ -408,7 +666,7 @@ async function getTransactionData(companyIds: string[], startDate?: string | nul
       transactions: {
         where: Object.keys(dateFilter).length > 0 ? { transactionDate: dateFilter } : {},
         orderBy: { transactionDate: 'desc' },
-        take: 1000
+        take: 500
       },
       company: true
     }

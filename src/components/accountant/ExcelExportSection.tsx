@@ -34,6 +34,14 @@ interface ExcelExportSectionProps {
 
 const REPORT_TYPES = [
   { 
+    id: 'customer-loan-details', 
+    name: 'Customer-Wise Loan Details', 
+    description: 'Complete customer data with all EMI due dates and payment history',
+    icon: Users,
+    color: 'text-rose-600',
+    bgColor: 'bg-rose-50'
+  },
+  { 
     id: 'full', 
     name: 'Complete Financial Report', 
     description: 'All-in-one comprehensive report for government filing',
