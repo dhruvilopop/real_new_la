@@ -21,6 +21,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import LoanDetailPanel from '@/components/loan/LoanDetailPanel';
 import MyCreditPassbook from '@/components/credit/MyCreditPassbook';
+import SecondaryPaymentPagesSection from '@/components/payment/SecondaryPaymentPagesSection';
 
 interface Loan {
   id: string; applicationNo: string; status: string; requestedAmount: number; loanType: string;
@@ -1499,14 +1500,15 @@ export default function StaffDashboard() {
 
       case 'activeLoans':
         return (
-          <Card className="bg-white shadow-sm border-0">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Banknote className="h-5 w-5 text-emerald-600" />
-                Active Loans
-              </CardTitle>
-              <CardDescription>All active loans - Click View to see details and pay EMI</CardDescription>
-            </CardHeader>
+          <div className="space-y-6">
+            <Card className="bg-white shadow-sm border-0">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Banknote className="h-5 w-5 text-emerald-600" />
+                  Active Loans
+                </CardTitle>
+                <CardDescription>All active loans - Click View to see details and pay EMI</CardDescription>
+              </CardHeader>
             <CardContent>
               {activeLoans.length === 0 ? (
                 <div className="text-center py-12 text-gray-500">
@@ -1550,6 +1552,10 @@ export default function StaffDashboard() {
               )}
             </CardContent>
           </Card>
+          
+          {/* Secondary Payment Pages Section */}
+          <SecondaryPaymentPagesSection userId={user?.id} />
+        </div>
         );
 
       case 'field':

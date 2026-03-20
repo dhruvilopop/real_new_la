@@ -25,6 +25,7 @@ import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import PaymentRequestsSection from '@/components/payment/PaymentRequestsSection';
+import SecondaryPaymentPagesSection from '@/components/payment/SecondaryPaymentPagesSection';
 
 interface Loan {
   id: string; applicationNo: string; status: string; requestedAmount: number; loanType: string;
@@ -422,13 +423,14 @@ export default function CashierDashboard() {
 
       case 'activeLoans':
         return (
-          <Card className="bg-white shadow-sm border-0">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Banknote className="h-5 w-5 text-emerald-600" />
-                Active Loans
-              </CardTitle>
-              <CardDescription>All active loans with EMI details</CardDescription>
+          <div className="space-y-6">
+            <Card className="bg-white shadow-sm border-0">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Banknote className="h-5 w-5 text-emerald-600" />
+                  Active Loans
+                </CardTitle>
+                <CardDescription>All active loans with EMI details</CardDescription>
             </CardHeader>
             <CardContent>
               {activeLoans.length === 0 ? (
@@ -473,10 +475,19 @@ export default function CashierDashboard() {
               )}
             </CardContent>
           </Card>
+          
+          {/* Secondary Payment Pages Section */}
+          <SecondaryPaymentPagesSection userId={user?.id} />
+        </div>
         );
 
       case 'paymentRequests':
-        return <PaymentRequestsSection cashierId={user?.id || ''} />;
+        return (
+          <div className="space-y-6">
+            <PaymentRequestsSection cashierId={user?.id || ''} />
+            <SecondaryPaymentPagesSection userId={user?.id} />
+          </div>
+        );
 
       case 'dashboard':
       default:

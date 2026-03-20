@@ -24,6 +24,7 @@ import OfflineLoanForm from '@/components/offline-loan/OfflineLoanForm';
 import OfflineLoansList from '@/components/offline-loan/OfflineLoansList';
 import LoanDetailPanel from '@/components/loan/LoanDetailPanel';
 import MyCreditPassbook from '@/components/credit/MyCreditPassbook';
+import SecondaryPaymentPagesSection from '@/components/payment/SecondaryPaymentPagesSection';
 
 interface Loan {
   id: string; applicationNo: string; status: string; requestedAmount: number; loanType: string;
@@ -630,6 +631,9 @@ export default function AgentDashboard() {
                 toast({ title: 'Payment Collected', description: 'EMI payment collected and credit updated' });
               }}
             />
+            
+            {/* Secondary Payment Pages Section */}
+            <SecondaryPaymentPagesSection userId={user?.id} />
           </div>
         );
 

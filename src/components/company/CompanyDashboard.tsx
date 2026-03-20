@@ -23,6 +23,7 @@ import EMICalendar from '@/components/emi/EMICalendar';
 import OfflineLoanForm from '@/components/offline-loan/OfflineLoanForm';
 import OfflineLoansList from '@/components/offline-loan/OfflineLoansList';
 import MyCreditPassbook from '@/components/credit/MyCreditPassbook';
+import SecondaryPaymentPagesSection from '@/components/payment/SecondaryPaymentPagesSection';
 
 interface Loan {
   id: string; applicationNo: string; status: string; requestedAmount: number; loanType: string;
@@ -927,7 +928,12 @@ export default function CompanyDashboard() {
         );
 
       case 'emi-collection':
-        return <EMICollectionSection userId={user?.id || ''} userRole={user?.role || 'COMPANY'} />;
+        return (
+          <div className="space-y-6">
+            <EMICollectionSection userId={user?.id || ''} userRole={user?.role || 'COMPANY'} />
+            <SecondaryPaymentPagesSection userId={user?.id} companyId={user?.companyId} />
+          </div>
+        );
       
       case 'emi-calendar':
         return <EMICalendar userId={user?.id || ''} userRole={user?.role || 'COMPANY'} />;

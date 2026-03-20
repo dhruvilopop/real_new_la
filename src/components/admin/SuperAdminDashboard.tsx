@@ -33,6 +33,7 @@ import CreditManagementPage from '@/components/credit/CreditManagementPage';
 import SuperAdminMyCredit from '@/components/credit/SuperAdminMyCredit';
 import LoanDetailPanel from '@/components/loan/LoanDetailPanel';
 import EMISettingsDialog from '@/components/customer/EMISettingsDialog';
+import SecondaryPaymentPagesSection from '@/components/payment/SecondaryPaymentPagesSection';
 
 interface Loan {
   id: string; applicationNo: string; status: string; requestedAmount: number; loanType: string;
@@ -2384,6 +2385,9 @@ export default function SuperAdminDashboard() {
                 </DialogFooter>
               </DialogContent>
             </Dialog>
+
+            {/* Secondary Payment Pages Section */}
+            <SecondaryPaymentPagesSection userId={user?.id} />
           </div>
         );
 

@@ -9,15 +9,22 @@ export async function GET(request: NextRequest) {
     const loanApplicationId = searchParams.get('loanApplicationId');
     const action = searchParams.get('action');
 
-    // Get all secondary payment pages for a company
+    // Get all secondary payment pages for a company (or all)
     if (action === 'secondary-pages') {
       const companyId = searchParams.get('companyId');
-      if (!companyId) {
-        return NextResponse.json({ error: 'Company ID is required' }, { status: 400 });
+      
+      const whereClause: any = { isActive: true };
+      if (companyId && companyId !== 'all') {
+        whereClause.companyId = companyId;
       }
 
       const pages = await db.secondaryPaymentPage.findMany({
-        where: { companyId, isActive: true },
+        where: whereClause,
+        include: {
+          company: {
+            select: { id: true, name: true }
+          }
+        },
         orderBy: { createdAt: 'desc' }
       });
 
@@ -111,10 +118,55 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST - Create or Update EMI Payment Settings
+// POST - Create or Update EMI Payment Settings or Secondary Payment Page
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+    const { action } = body;
+
+    // Create secondary payment page
+    if (action === 'create-secondary-page') {
+      const {
+        companyId,
+        name,
+        description,
+        upiId,
+        qrCodeUrl,
+        bankName,
+        accountNumber,
+        accountName,
+        ifscCode,
+        createdById
+      } = body;
+
+      if (!companyId || !name) {
+        return NextResponse.json({ error: 'Company ID and name are required' }, { status: 400 });
+      }
+
+      const page = await db.secondaryPaymentPage.create({
+        data: {
+          companyId,
+          name,
+          description,
+          upiId,
+          qrCodeUrl,
+          bankName,
+          accountNumber,
+          accountName,
+          ifscCode,
+          createdById: createdById || 'system'
+        },
+        include: {
+          company: {
+            select: { id: true, name: true }
+          }
+        }
+      });
+
+      return NextResponse.json({ success: true, page });
+    }
+
+    // Update EMI payment settings
     const {
       emiScheduleId,
       loanApplicationId,
