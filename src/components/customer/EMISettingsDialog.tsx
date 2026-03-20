@@ -59,8 +59,8 @@ interface EMISettingsDialogProps {
     partialPaymentCount?: number;
     loanApplicationId?: string;
   } | null;
-  loanId: string;
-  companyId?: string;
+  loanId: string | null;
+  companyId?: string | null;
   onSettingsSaved?: () => void;
 }
 

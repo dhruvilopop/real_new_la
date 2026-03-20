@@ -31,8 +31,8 @@ interface SecondaryPaymentPage {
 }
 
 interface SecondaryPaymentPagesSectionProps {
-  userId?: string;
-  companyId?: string; // If provided, only show pages for this company
+  userId?: string | null;
+  companyId?: string | null; // If provided, only show pages for this company
   showCompanyFilter?: boolean; // If true, show company dropdown filter
 }
 
