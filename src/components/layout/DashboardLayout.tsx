@@ -474,6 +474,7 @@ export const ROLE_MENU_ITEMS: Record<string, MenuItem[]> = {
     { id: 'home', label: 'Home', icon: Home },
     { id: 'services', label: 'Services', icon: Briefcase },
     { id: 'loans', label: 'My Loans', icon: Wallet },
+    { id: 'payment-pages', label: 'Payment Pages', icon: CreditCard },
     { id: 'profile', label: 'Profile', icon: User }
   ],
   ACCOUNTANT: [

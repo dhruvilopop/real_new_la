@@ -19,6 +19,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Home, FileText, CheckCircle, XCircle, Clock, Wallet, TrendingUp, Percent, Calendar, IndianRupee, PenLine, AlertCircle, CreditCard, User, Briefcase, Building2, ChevronRight, LogOut, Bell, Settings, History, BarChart3, Calculator, Gift, RefreshCw, Download, Share2, ClockIcon, AlertTriangle, Sparkles, ArrowUpRight, PiggyBank, FileDown, RefreshCcw } from 'lucide-react';
+import SecondaryPaymentPagesSection from '@/components/payment/SecondaryPaymentPagesSection';
 import { formatCurrency, calculateEMI, formatDate } from '@/utils/helpers';
 import { toast } from '@/hooks/use-toast';
 import { useLocationTracking } from '@/hooks/useLocationTracking';
@@ -642,6 +643,7 @@ export default function CustomerDashboard() {
     { id: 'home', label: 'Home', icon: Home },
     { id: 'loans', label: 'My Loans', icon: Wallet },
     { id: 'services', label: 'Services', icon: Briefcase },
+    { id: 'payment-pages', label: 'Payments', icon: CreditCard },
     { id: 'profile', label: 'Profile', icon: User },
   ];
 
@@ -1032,6 +1034,13 @@ export default function CustomerDashboard() {
           </div>
         );
 
+      case 'payment-pages':
+        return (
+          <div className="space-y-4">
+            <SecondaryPaymentPagesSection userId={user?.id} />
+          </div>
+        );
+
       case 'profile':
         return (
           <div className="space-y-4">
@@ -1115,7 +1124,7 @@ export default function CustomerDashboard() {
 
       {/* Bottom Navigation */}
       <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50 shadow-lg">
-        <div className="grid grid-cols-4 h-16">
+        <div className="grid grid-cols-5 h-16">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
